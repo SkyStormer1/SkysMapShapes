@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "package": "com.skystormer.skysmapshapes.mixin",
+  "compatibilityLevel": "JAVA_${java_version}",
+  "client": [
+    "GuiMapMixin",
+    "WaypointReaderMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

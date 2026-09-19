@@ -1,0 +1,11 @@
+{
+  "required": false,
+  "package": "com.skystormer.skysmapshapes.mixin.minimap",
+  "compatibilityLevel": "JAVA_${java_version}",
+  "client": [
+    "SupportXaeroWorldmapMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

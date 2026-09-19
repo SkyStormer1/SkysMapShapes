@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "id": "skysmapshapes",
+  "version": "${version}",
+  "name": "Sky's Map Shapes",
+  "description": "Draw labelled circles, squares and rectangles on Xaero's World Map and Minimap, sized in blocks: despawn spheres, farm areas, claims, anything you want to see at a glance.",
+  "authors": [
+    "SkyStormer1"
+  ],
+  "contact": {
+    "homepage": "https://github.com/SkyStormer1/SkysMapShapes",
+    "sources": "https://github.com/SkyStormer1/SkysMapShapes",
+    "issues": "https://github.com/SkyStormer1/SkysMapShapes/issues"
+  },
+  "license": "MIT",
+  "icon": "assets/skysmapshapes/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      {
+        "value": "com.skystormer.skysmapshapes.ShapesClient",
+        "adapter": "kotlin"
+      }
+    ],
+    "modmenu": [
+      {
+        "value": "com.skystormer.skysmapshapes.gui.ModMenuIntegration",
+        "adapter": "kotlin"
+      }
+    ]
+  },
+  "mixins": [
+    "skysmapshapes.mixins.json",
+    "skysmapshapes.minimap.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric-api": "*",
+    "fabric-language-kotlin": ">=${fabric_kotlin_version}",
+    "xaeroworldmap": ">=1.44.0",
+    "minecraft": "${minecraft_version}",
+    "java": ">=${java_version}"
+  },
+  "suggests": {
+    "modmenu": "*",
+    "xaerominimap": "*",
+    "skysmapexposer": "*"
+  }
+}
