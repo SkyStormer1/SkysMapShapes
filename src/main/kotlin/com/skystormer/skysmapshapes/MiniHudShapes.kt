@@ -169,7 +169,7 @@ object MiniHudShapes {
         val colour = json.get("color")?.asInt?.let { it or 0xFF000000.toInt() } ?: Colours.WHITE.argb
         // The same shape keeps the same id while it is not changed, so hiding it here sticks.
         val id = "minihud:" + dimension + ":" + type + ":" + MiniHudGeometry.identity(json)
-        return MiniHudShape(id, label, dimension, colour, geometry, type, enabled, handle)
+        return MiniHudShape(id, label, dimension, colour, geometry, type, enabled, MiniHudGeometry.heightOf(json), handle)
     }
 
     /**
@@ -181,10 +181,12 @@ object MiniHudShapes {
      * the upright prisms (square, diamond, octagon, rectangle) run 128 blocks above and below it.
      * All of that can be changed afterwards in MiniHUD's editor.
      */
-    fun create(shape: Shape, y: Int): Boolean {
+    fun create(shape: Shape, y: Int, typeId: String? = null): Boolean {
         val api = api ?: return false
         return try {
             val json = MiniHudGeometry.toMiniHudJson(shape, y) ?: return false
+            // A shared MiniHUD shape is made again as the kind it was, when that kind fits these fields.
+            if (typeId != null) MiniHudGeometry.retype(json, typeId)
             val typeClass = Class.forName("fi.dy.masa.minihud.renderer.shapes.ShapeType")
             val type = typeClass.getMethod("fromString", String::class.java).invoke(null, json.get("type").asString)
                 ?: return false.also { Log.warn("MiniHUD has no shape type '{}'", json.get("type").asString) }
@@ -243,8 +245,11 @@ class MiniHudShape(
     override val dimension: String,
     override val colour: Int,
     override val geometry: Geometry,
-    private val type: String,
+    /** MiniHUD's own name for the kind of shape, such as `despawn_sphere`. */
+    val typeId: String,
     val enabledInMiniHud: Boolean,
+    /** The height it sits at in the world, for sharing it or making it again elsewhere. */
+    val centreY: Int? = null,
     /** MiniHUD's own shape object, for shapes in the dimension you are in; null for ones read from a file. */
     val handle: Any? = null,
 ) : MapShape {
@@ -258,7 +263,46 @@ class MiniHudShape(
     override val fromMiniHud: Boolean get() = true
     override val name: String get() = label.ifBlank { typeTitle }
 
-    val typeTitle: String get() = type.split('_').joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
+    val typeTitle: String get() = typeId.split('_').joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
+
+    /**
+     * The same outline as one of this mod's own shapes, for sharing it or keeping a copy. Null for
+     * an outline this mod has no shape for, such as a line.
+     */
+    fun asOwnShape(): Shape? {
+        val b = bounds
+        val x = Math.floor(b.centreX).toInt()
+        val z = Math.floor(b.centreZ).toInt()
+        val common = { type: Shape.Type, radius: Double, width: Double, length: Double ->
+            Shape(
+                label = name, dimension = dimension, type = type, x = x, z = z,
+                radius = radius, width = width, length = length, colour = colour, y = centreY,
+            )
+        }
+        return when (val g = geometry) {
+            is Geometry.Circle -> common(Shape.Type.CIRCLE, g.radius, 0.0, 0.0)
+            is Geometry.Ellipse -> common(Shape.Type.ELLIPSE, 0.0, g.rx * 2, g.rz * 2)
+            is Geometry.Polygon -> {
+                if (!g.closed) return null
+                val points = g.points(1f)
+                val width = b.maxX - b.minX
+                val length = b.maxZ - b.minZ
+                when {
+                    points.size / 2 == 8 -> common(Shape.Type.OCTAGON, width / 2, 0.0, 0.0)
+                    // A diamond's corners sit in the middle of each side of its box.
+                    points.size / 2 == 4 && isDiamond(points, b) -> common(Shape.Type.RHOMBUS, width / 2, 0.0, 0.0)
+                    else -> common(Shape.Type.RECTANGLE, 0.0, width, length)
+                }
+            }
+        }
+    }
+
+    private fun isDiamond(points: DoubleArray, b: Geometry.Bounds): Boolean =
+        (0 until 4).all { i ->
+            val x = points[i * 2]
+            val z = points[i * 2 + 1]
+            (Math.abs(x - b.centreX) < 1e-6) != (Math.abs(z - b.centreZ) < 1e-6)
+        }
 
     override fun describeSize(): String {
         val b = bounds
@@ -413,6 +457,44 @@ internal object MiniHudGeometry {
             }
         }
         return json
+    }
+
+    /** Which fields each kind of MiniHUD shape is built from. */
+    private val NEEDS: Map<String, List<String>> = buildMap {
+        val sphere = listOf("center", "radius")
+        for (type in SPHERES) put(type, sphere)
+        put("ellipsoid_spawn", listOf("center", "radius", "radius_z"))
+        for (type in listOf("circle", "square", "rhombus")) put(type, listOf("center", "radius", "main_axis", "height"))
+        put("box", listOf("corner1", "corner2"))
+        val tapered = listOf("origin_x", "origin_y", "origin_z", "bottom_radius", "top_radius", "direction", "height")
+        for (type in listOf("cone", "pyramid", "diamond_pyramid", "octagon_pyramid")) put(type, tapered)
+    }
+
+    /**
+     * Makes [json] MiniHUD's [typeId] instead, when that kind is built from the fields it already
+     * has: a sphere can become another kind of sphere, but not a box. Says whether it did.
+     */
+    fun retype(json: JsonObject, typeId: String): Boolean {
+        if (json.get("type")?.asString == typeId) return true
+        val needs = NEEDS[typeId] ?: return false
+        if (!needs.all { json.has(it) }) return false
+        json.remove("type")
+        json.addProperty("type", typeId)
+        return true
+    }
+
+    /** The height at the middle of a shape, from whichever fields its kind uses. */
+    fun heightOf(json: JsonObject): Int? {
+        vec(json, "center")?.let { return Math.floor(it[1]).toInt() }
+        val corner1 = vec(json, "corner1")
+        val corner2 = vec(json, "corner2")
+        if (corner1 != null && corner2 != null) return Math.floor((corner1[1] + corner2[1]) / 2).toInt()
+        json.get("origin_y")?.let { origin ->
+            val height = json.get("height")?.asDouble ?: 0.0
+            return Math.floor(origin.asDouble + height / 2).toInt()
+        }
+        vec(json, "start")?.let { return Math.floor(it[1]).toInt() }
+        return null
     }
 
     private fun vec(json: JsonObject, key: String): DoubleArray? {

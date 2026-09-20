@@ -41,6 +41,9 @@ object Config {
      */
     var hideInMiniHud = true
 
+    /** Whether shapes shared in chat by other players are offered as a clickable add button. */
+    var shareInChat = true
+
     /** Multiplies every shape's own outline thickness, to make them all thicker or thinner at once. */
     var thicknessScale = 1f
 
@@ -81,6 +84,7 @@ object Config {
             showMiniHud = json.get("showMiniHud")?.asBoolean ?: showMiniHud
             miniHudIncludeDisabled = json.get("miniHudIncludeDisabled")?.asBoolean ?: miniHudIncludeDisabled
             hideInMiniHud = json.get("hideInMiniHud")?.asBoolean ?: hideInMiniHud
+            shareInChat = json.get("shareInChat")?.asBoolean ?: shareInChat
             thicknessScale = (json.get("thicknessScale")?.asFloat ?: thicknessScale).coerceIn(MIN_SCALE, MAX_SCALE)
             fillOpacity = (json.get("fillOpacity")?.asFloat ?: fillOpacity).coerceIn(0f, 1f)
             json.getAsJsonArray("presets")?.let { array ->
@@ -106,6 +110,7 @@ object Config {
             json.addProperty("showMiniHud", showMiniHud)
             json.addProperty("miniHudIncludeDisabled", miniHudIncludeDisabled)
             json.addProperty("hideInMiniHud", hideInMiniHud)
+            json.addProperty("shareInChat", shareInChat)
             json.addProperty("thicknessScale", thicknessScale)
             json.addProperty("fillOpacity", fillOpacity)
             val array = JsonArray()

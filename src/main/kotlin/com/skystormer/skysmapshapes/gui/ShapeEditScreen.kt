@@ -5,7 +5,9 @@ import com.skystormer.skysmapshapes.Config
 import com.skystormer.skysmapshapes.MapMenus
 import com.skystormer.skysmapshapes.MiniHudShapes
 import com.skystormer.skysmapshapes.Shape
+import com.skystormer.skysmapshapes.ShapeShare
 import com.skystormer.skysmapshapes.ShapeStore
+import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.components.CycleButton
 import net.minecraft.client.gui.components.EditBox
@@ -31,26 +33,42 @@ class ShapeEditScreen private constructor(
     x: Int,
     z: Int,
     label: String,
+    /** A shape to copy the settings of into a new one, as a shared shape does. */
+    template: Shape? = null,
+    /** How a shared shape was made in MiniHUD, when it was: its kind and the height it sat at. */
+    private val sharedMiniHudType: String? = null,
+    private val sharedY: Int? = null,
 ) : Screen(Component.literal(if (existing == null) "Add a shape" else "Edit shape")) {
+
+    /** Where the fields start from: the shape being edited, or one being copied. */
+    private val from: Shape? = existing ?: template
 
     // What is being edited, kept across rebuildWidgets (which changing the kind of shape causes).
     private var label = label
-    private var type = existing?.type ?: Shape.Type.CIRCLE
-    private var colour = existing?.colour ?: Config.presets.firstOrNull()?.colour ?: Colours.RED.argb
-    private var fill = existing?.fill ?: false
-    private var anchor = existing?.anchor ?: Shape.Anchor.CENTRE
-    private var lineWidth: Float = existing?.lineWidth ?: Config.DEFAULT_LINE_WIDTH
+    private var type = from?.type ?: Shape.Type.CIRCLE
+    private var colour = from?.colour ?: Config.presets.firstOrNull()?.colour ?: Colours.RED.argb
+    private var fill = from?.fill ?: false
+    private var anchor = from?.anchor ?: Shape.Anchor.CENTRE
+    private var lineWidth: Float = from?.lineWidth ?: Config.DEFAULT_LINE_WIDTH
 
     /** A new shape can be made in MiniHUD instead, when MiniHUD is installed. */
-    private var inMiniHud = false
+    private var inMiniHud = sharedMiniHudType != null && MiniHudShapes.installed && Config.showMiniHud &&
+        Minecraft.getInstance().player?.level()?.dimension()?.identifier()?.toString() == dimension
 
     private var xText = x.toString()
     private var zText = z.toString()
-    private var radiusText = existing?.takeIf { it.type.sized == Shape.Sized.RADIUS }?.radius?.let(Shape::number)
+    private var radiusText = from?.takeIf { it.type.sized == Shape.Sized.RADIUS }?.radius?.let(Shape::number)
         ?: Config.presets.firstOrNull()?.radius?.let(Shape::number) ?: "128"
-    private var widthText = existing?.takeIf { it.type.sized == Shape.Sized.WIDTH_LENGTH }?.width?.let(Shape::number) ?: "32"
-    private var lengthText = existing?.takeIf { it.type.sized == Shape.Sized.WIDTH_LENGTH }?.length?.let(Shape::number) ?: "32"
-    private var message: Component = Component.empty()
+    private var widthText = from?.takeIf { it.type.sized == Shape.Sized.WIDTH_LENGTH }?.width?.let(Shape::number) ?: "32"
+    private var lengthText = from?.takeIf { it.type.sized == Shape.Sized.WIDTH_LENGTH }?.length?.let(Shape::number) ?: "32"
+    private var message: Component =
+        if (existing == null && template != null)
+            Component.literal(
+                "Shared with you, for the ${ShapeShare.dimensionName(template.dimension)}. " +
+                    if (sharedMiniHudType != null && MiniHudShapes.installed) "It came from MiniHUD, so it can go in your world too."
+                    else "Add keeps it on your map."
+            )
+        else Component.empty()
 
     private lateinit var labelBox: EditBox
     private lateinit var xBox: EditBox
@@ -63,7 +81,7 @@ class ShapeEditScreen private constructor(
     override fun init() {
         val left = width / 2 - WIDTH / 2
         val third = (WIDTH - GAP * 2) / 3
-        var y = maxOf(4, (height - 274) / 2)
+        var y = maxOf(4, (height - 296) / 2)
 
         addRenderableWidget(StringWidget(left, y, WIDTH, font.lineHeight, title, font))
         y += font.lineHeight + GAP * 2
@@ -150,8 +168,9 @@ class ShapeEditScreen private constructor(
             "How thick this shape's outline is drawn, whatever the zoom. The Thickness scale in the settings makes every shape thicker or thinner at once.") { lineWidth = it })
         y += ROW + GAP
 
+        // Presets are for shaping a new one; editing an existing shape keeps the screen shorter.
         val presets = Config.presets
-        if (presets.isNotEmpty()) {
+        if (existing == null && presets.isNotEmpty()) {
             val each = (WIDTH - GAP * (presets.size - 1)) / presets.size
             presets.forEachIndexed { i, preset ->
                 addRenderableWidget(
@@ -189,26 +208,48 @@ class ShapeEditScreen private constructor(
         addRenderableWidget(messageWidget)
         y += font.lineHeight * 2 + GAP * 2
 
-        addRenderableWidget(
-            Button.builder(Component.literal(if (existing == null) "Add" else "Save")) { save() }.bounds(left, y, third, ROW).build()
-        )
+        // What can be done with a shape already kept: its own row, above the usual buttons.
         if (existing != null) {
+            val toMiniHud = MiniHudShapes.installed && Config.showMiniHud
+            val shareWidth = if (toMiniHud) (WIDTH - GAP) / 2 else WIDTH
             addRenderableWidget(
-                Button.builder(Component.literal("Delete…")) { MapMenus.confirmDelete(parent, existing) }
-                    .bounds(left + third + GAP, y, third, ROW).build()
-            )
-        } else if (presets.size > 1) {
-            addRenderableWidget(
-                Button.builder(Component.literal("Add all presets")) { addAllPresets() }
-                    .bounds(left + third + GAP, y, third, ROW)
-                    .tooltip(Tooltip.create(Component.literal(
-                        "Add one circle per preset at this position: " +
-                            presets.joinToString(", ") { "${it.name} ${Shape.number(it.radius)}" } + "."
-                    )))
+                Button.builder(Component.literal("Share in chat…")) { MapMenus.confirmShare(this, existing) }
+                    .bounds(left, y, shareWidth, ROW)
+                    .tooltip(Tooltip.create(Component.literal("Send this shape to everyone in chat. Anyone with this mod can click to add it to their own map.")))
                     .build()
             )
+            if (toMiniHud) {
+                addRenderableWidget(
+                    // Back to the map or list, not here: the shape is gone from this mod once moved.
+                    Button.builder(Component.literal("Move into MiniHUD…")) { MapMenus.confirmMoveToMiniHud(parent, existing) }
+                        .bounds(left + shareWidth + GAP, y, WIDTH - shareWidth - GAP, ROW)
+                        .tooltip(Tooltip.create(Component.literal("Turn this into a MiniHUD shape, shown in the world as well as on the map instead.")))
+                        .build()
+                )
+            }
+            y += ROW + GAP
         }
-        addRenderableWidget(Button.builder(CommonComponents.GUI_CANCEL) { onClose() }.bounds(left + (third + GAP) * 2, y, third, ROW).build())
+
+        // Keep, undo, and the one that throws it away, always in the same places.
+        val keep = Button.builder(Component.literal(if (existing == null) "Add" else "Save")) { save() }
+        val extra: Button.Builder? = when {
+            existing != null -> Button.builder(Component.literal("Delete…")) { MapMenus.confirmDelete(parent, existing) }
+            presets.size > 1 -> Button.builder(Component.literal("Add all presets")) { addAllPresets() }
+                .tooltip(Tooltip.create(Component.literal(
+                    "Add one circle per preset at this position: " +
+                        presets.joinToString(", ") { "${it.name} ${Shape.number(it.radius)}" } + "."
+                )))
+            else -> null
+        }
+        if (extra == null) {
+            val half = (WIDTH - GAP) / 2
+            addRenderableWidget(keep.bounds(left, y, half, ROW).build())
+            addRenderableWidget(Button.builder(CommonComponents.GUI_CANCEL) { onClose() }.bounds(left + half + GAP, y, WIDTH - half - GAP, ROW).build())
+        } else {
+            addRenderableWidget(keep.bounds(left, y, third, ROW).build())
+            addRenderableWidget(extra.bounds(left + third + GAP, y, third, ROW).build())
+            addRenderableWidget(Button.builder(CommonComponents.GUI_CANCEL) { onClose() }.bounds(left + (third + GAP) * 2, y, third, ROW).build())
+        }
     }
 
     private fun colourButton(x: Int, y: Int, width: Int): CycleButton<Int> {
@@ -268,6 +309,10 @@ class ShapeEditScreen private constructor(
 
     private fun save() {
         keepEdits()
+        // It may have been deleted or moved into MiniHUD while this screen stayed open.
+        if (existing != null && ShapeStore.byId(existing.id) == null) {
+            return show("${existing.name} is not on your map any more.")
+        }
         val x = xText.toIntOrNull() ?: return show("Type a whole number for X.")
         val z = zText.toIntOrNull() ?: return show("Type a whole number for Z.")
         val shape = when (type.sized) {
@@ -282,7 +327,9 @@ class ShapeEditScreen private constructor(
             }
         }
         if (existing == null && inMiniHud) {
-            if (!MiniHudShapes.create(shape, playerY())) return show("MiniHUD would not take that shape; the log says why.")
+            if (!MiniHudShapes.create(shape, sharedY ?: playerY(), sharedMiniHudType)) {
+                return show("MiniHUD would not take that shape; the log says why.")
+            }
             MapMenus.say("Made ${shape.name} in MiniHUD")
         } else {
             ShapeStore.put(if (existing != null) shape.copy(id = existing.id, visible = existing.visible, y = existing.y) else shape)
@@ -337,6 +384,12 @@ class ShapeEditScreen private constructor(
     }
 
     companion object {
+        /** A shape someone shared in chat, to look at before it is kept. */
+        fun forShared(parent: Screen?, shared: ShapeShare.Shared) = ShapeEditScreen(
+            parent, null, shared.shape.dimension, shared.shape.x, shared.shape.z, shared.shape.label,
+            shared.shape, shared.miniHudType, shared.y,
+        )
+
         fun forNew(parent: Screen?, dimension: String, x: Int, z: Int, label: String) =
             ShapeEditScreen(parent, null, dimension, x, z, label)
 

@@ -5,6 +5,7 @@ import com.skystormer.skysmapshapes.gui.ShapeListScreen
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.ConfirmScreen
 import net.minecraft.client.gui.screens.Screen
+import net.minecraft.network.chat.CommonComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.ResourceKey
 import net.minecraft.world.level.Level
@@ -69,6 +70,9 @@ object MapMenus {
                 ShapeStore.setVisible(shape, false)
                 say("Hid ${shape.name}. Show it again from the Shapes list.")
             })
+            if (ShapeShare.asShape(shape) != null) {
+                options.add(option("Share in chat…", options.size, target) { parent -> confirmShare(parent, shape) })
+            }
             if (Config.hideInMiniHud && shape.editable) {
                 options.add(option("Hide on the map only", options.size, target) { _ ->
                     ShapeStore.hideOnMapOnly(shape)
@@ -85,7 +89,65 @@ object MapMenus {
             ShapeStore.setVisible(shape, false)
             say("Hid ${shape.name}. Show it again from the Shapes list.")
         })
+        options.add(option("Share in chat…", options.size, target) { parent -> confirmShare(parent, shape) })
+        if (MiniHudShapes.installed && Config.showMiniHud) {
+            options.add(option("Move into MiniHUD…", options.size, target) { parent -> confirmMoveToMiniHud(parent, shape) })
+        }
         options.add(option("Delete…", options.size, target) { parent -> confirmDelete(parent, shape) })
+    }
+
+    /** Asks first, because sharing sends a line of chat everyone can see. */
+    fun confirmShare(parent: Screen?, shape: MapShape) {
+        open(ConfirmScreen(
+            { yes ->
+                if (yes && ShapeShare.share(shape)) say("Shared ${shape.name} in chat")
+                open(parent)
+            },
+            Component.literal("Share ${shape.name} in chat?"),
+            Component.literal(
+                "Everyone on the server sees a line of chat with this shape in it. Anyone with this mod can click it to add it to their own map, in the ${ShapeShare.dimensionName(shape.dimension)}." +
+                    if (shape.fromMiniHud) " With MiniHUD, they can have it in their world too; without it, they still get the outline on their map." else ""
+            ),
+            Component.literal("Share"),
+            CommonComponents.GUI_CANCEL,
+        ))
+    }
+
+    /**
+     * Asks first, then makes [shape] in MiniHUD and takes it off this mod's map, so there is one
+     * of it rather than two. MiniHUD only holds the dimension you are in.
+     */
+    fun confirmMoveToMiniHud(parent: Screen?, shape: Shape) {
+        val player = Minecraft.getInstance().player
+        if (player == null || player.level().dimension().identifier().toString() != shape.dimension) {
+            say("Go to the ${ShapeShare.dimensionName(shape.dimension)} first: MiniHUD only holds shapes for the dimension you are in.")
+            return
+        }
+        if (ShapeStore.byId(shape.id) == null) {
+            say("${shape.name} is not on your map any more.")
+            return
+        }
+        open(ConfirmScreen(
+            { yes ->
+                // Checked again here: the screen it was started from may have been left open.
+                if (yes && ShapeStore.byId(shape.id) != null) {
+                    if (MiniHudShapes.create(shape, player.blockY)) {
+                        ShapeStore.remove(shape.id)
+                        say("${shape.name} is now a MiniHUD shape")
+                    } else {
+                        say("MiniHUD would not take that shape; the log says why.")
+                    }
+                }
+                open(parent)
+            },
+            Component.literal("Move ${shape.name} into MiniHUD?"),
+            Component.literal(
+                "It becomes an ordinary MiniHUD shape, shown in the world as well as on the map, and edited in MiniHUD from then on. " +
+                    "It is put at your height (${player.blockY}), and is taken off this mod's own map so it is not drawn twice."
+            ),
+            Component.literal("Move it"),
+            CommonComponents.GUI_CANCEL,
+        ))
     }
 
     /** Asks first, then deletes [shape] and goes back to [parent]. */

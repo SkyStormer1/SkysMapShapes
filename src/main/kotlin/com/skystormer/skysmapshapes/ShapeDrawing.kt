@@ -1,6 +1,10 @@
 package com.skystormer.skysmapshapes
 
 import com.mojang.blaze3d.vertex.PoseStack
+import net.minecraft.resources.ResourceKey
+import net.minecraft.world.level.Level
+import net.minecraft.world.phys.Vec3
+import xaero.lib.client.graphics.XaeroBufferProvider
 import com.mojang.blaze3d.vertex.VertexConsumer
 import net.minecraft.client.Minecraft
 import org.joml.Matrix4f
@@ -50,6 +54,9 @@ object ShapeDrawing {
 
     private var minimapHookRan = false
 
+    /** Set when the minimap's world-map path has already drawn this frame, so it is not drawn twice. */
+    private var drawnFromWorldMap = false
+
     @JvmStatic
     fun drawMinimap(
         mapProcessor: MapProcessor, pose: PoseStack, originX: Int, originZ: Int,
@@ -57,8 +64,9 @@ object ShapeDrawing {
     ) {
         if (!minimapHookRan) {
             minimapHookRan = true
-            Log.info("Minimap hook working")
+            Log.info("Minimap hook working (from the world map's data)")
         }
+        drawnFromWorldMap = true
         if (!Config.enabled || !Config.showOnMinimap) return
         try {
             val shapes = shapesFor(mapProcessor) ?: return
@@ -70,6 +78,45 @@ object ShapeDrawing {
             failOnce("minimap", e)
         }
     }
+
+    /**
+     * The other way the minimap draws: from its own records rather than the world map's, which is
+     * what it does underground in cave mode. Called where the two ways meet, so this draws only
+     * when the world-map path has not already done it this frame.
+     *
+     * Nothing here says how much of the world is on screen, so everything within [MINIMAP_REACH]
+     * of the middle is drawn and the minimap's own edges clip it.
+     */
+    @JvmStatic
+    fun drawMinimapAnyMode(pose: PoseStack, renderPos: Vec3, mapDimension: ResourceKey<Level>?, buffers: XaeroBufferProvider) {
+        val alreadyDrawn = drawnFromWorldMap
+        drawnFromWorldMap = false
+        if (alreadyDrawn || !Config.enabled || !Config.showOnMinimap) return
+        try {
+            val dimension = mapDimension?.identifier()?.toString() ?: return
+            val shapes = MapShapes.visibleIn(dimension).takeIf { it.isNotEmpty() } ?: return
+            if (!caveHookRan) {
+                caveHookRan = true
+                Log.info("Minimap hook working (from the minimap's own data, as underground)")
+            }
+            val originX = Math.floor(renderPos.x).toInt()
+            val originZ = Math.floor(renderPos.z).toInt()
+            val matrix = pose.last().pose()
+            val view = Geometry.Bounds(
+                originX - MINIMAP_REACH, originZ - MINIMAP_REACH,
+                originX + MINIMAP_REACH, originZ + MINIMAP_REACH,
+            )
+            val buffer = buffers.getBuffer(xaero.common.graphics.CustomRenderTypes.MAP_CHUNK_OVERLAY)
+            draw(buffer, matrix, shapes, originX, originZ, blocksPerUnit(matrix), view)
+        } catch (e: Throwable) {
+            failOnce("minimap in this mode", e)
+        }
+    }
+
+    private var caveHookRan = false
+
+    /** How far from the middle of the minimap shapes are drawn, in blocks. */
+    private const val MINIMAP_REACH = 4096.0
 
     private fun shapesFor(mapProcessor: MapProcessor): List<MapShape>? {
         val dimension = mapProcessor.mapWorld?.currentDimension?.dimId?.identifier()?.toString() ?: return null

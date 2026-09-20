@@ -2,7 +2,11 @@ package com.skystormer.skysmapshapes
 
 import com.mojang.blaze3d.platform.InputConstants
 import com.skystormer.skysmapshapes.gui.ShapeListScreen
+import com.mojang.brigadier.arguments.StringArgumentType
 import net.fabricmc.api.ClientModInitializer
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
+import net.fabricmc.fabric.api.client.command.v2.ClientCommands
+import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents
@@ -37,6 +41,21 @@ object ShapesClient : ClientModInitializer {
         }
         Config.load()
         KeyMappingHelper.registerKeyMapping(listKey)
+
+        // A shape shared in chat becomes a message with an add button; everything else is untouched.
+        ClientReceiveMessageEvents.ALLOW_CHAT.register { message, _, _, _, _ -> ShapeShare.onChat(message.string) }
+        ClientReceiveMessageEvents.ALLOW_GAME.register { message, _ -> ShapeShare.onChat(message.string) }
+
+        ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
+            dispatcher.register(
+                ClientCommands.literal(ShapeShare.COMMAND).then(
+                    ClientCommands.argument("code", StringArgumentType.word()).executes { context ->
+                        ShapeShare.accept(StringArgumentType.getString(context, "code"))
+                        1
+                    }
+                )
+            )
+        }
 
         ClientPlayConnectionEvents.JOIN.register { _, _, client -> client.execute { ShapeStore.open(client) } }
         ClientPlayConnectionEvents.DISCONNECT.register { _, client ->

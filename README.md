@@ -1,13 +1,19 @@
 <p align="center"><img src="src/main/resources/assets/skysmapshapes/icon.png" width="128" alt="Sky's Map Shapes icon"></p>
 
-# Sky's Map Shapes
+<h1 align="center">Sky's Map Shapes</h1>
 
-A client-side Fabric mod for Minecraft 26.2 that draws labelled circles, squares and other shapes
-on **Xaero's World Map** and **Xaero's Minimap**, sized in blocks. Made for seeing despawn spheres
-around a farm or an AFK spot, and useful for anything else you want marked out: a build area, a
-claim, the range of a beacon.
+<p align="center">
+  <a href="https://github.com/SkyStormer1/SkysMapShapes/releases/latest"><img src="https://img.shields.io/github/v/release/SkyStormer1/SkysMapShapes?label=Download%20the%20latest%20version&style=for-the-badge&color=2ea44f" alt="Download the latest version"></a>
+</p>
 
-**[Download the latest version](https://github.com/SkyStormer1/SkysMapShapes/releases/latest)**
+<p align="center">
+  <b><a href="https://github.com/SkyStormer1/SkysMapShapes/releases/latest">⬇ Download the mod jar</a></b> · Minecraft 26.2 · Fabric · client-side
+</p>
+
+A client-side Fabric mod that draws labelled circles, squares and other shapes on **Xaero's World
+Map** and **Xaero's Minimap**, sized in blocks. Made for seeing despawn spheres around a farm or an
+AFK spot, and useful for anything else you want marked out: a build area, a claim, the range of a
+beacon.
 
 ## What it does
 
@@ -22,34 +28,45 @@ claim, the range of a beacon.
   change these distances.
 - **Label, colour, thickness and fill** for each shape, with a global thickness scale for all of
   them at once.
-- **Hover an outline** to see what it is, and right-click it to edit, hide or delete it. Two
-  shapes on top of each other are both offered.
+- **Hover an outline** to see what it is, and right-click it to edit, hide or delete. Two shapes on
+  top of each other are both offered.
 - **A shapes list**, from the **Shapes** button on the world map: search it, show or hide shapes,
   jump the map to one, edit or delete it. Hidden shapes stay listed, so they are easy to bring
   back.
+- **Share a shape with the people you play with**, the way Xaero shares a waypoint. Right-click it
+  and choose **Share in chat…**: everyone sees an ordinary line of chat, and anyone with this mod
+  sees an **[Add to my map]** button that opens the shape for them to look at before keeping it.
+  The shape carries its own dimension, so a Nether shape shared while they are in the Overworld is
+  added to their Nether map, at the Nether coordinates it had for you. Nothing is scaled, and
+  nothing is added to anyone's map without them clicking.
 - **Shapes sit under your waypoints**, and a smaller shape always draws on top of a larger one.
 - Shapes are saved per server and per dimension.
 
 ## With MiniHUD
 
-MiniHUD is optional. When it is installed, its shapes are drawn on your map as outlines:
+MiniHUD is optional. When it is installed, this mod and MiniHUD work as one:
 
-- **Every kind of MiniHUD shape**, as its footprint seen from above: a sphere is its widest
-  circle, a prism or pyramid its base, a box its rectangle, a line its line. A shape lying
-  sideways is the strip it covers.
+- **MiniHUD's shapes are drawn on your map** as outlines: a sphere is its widest circle, a prism or
+  pyramid its base, a box its rectangle, a line its line. A shape lying sideways is the strip it
+  covers.
 - **Kept in step.** Shapes in the dimension you are in are read from MiniHUD twice a second, so
   adding, moving or deleting one in MiniHUD shows on the map straight away. Other dimensions come
-  from the files MiniHUD saves. Your own shapes are never added to MiniHUD unless you ask.
+  from the files MiniHUD saves.
 - **Shown even when MiniHUD's own shape renderer is off**, so you can keep the world clear and
   still see everything on the map.
 - **Edit** on a MiniHUD shape opens MiniHUD's own Shape Editor on it.
 - **Hide** switches it off in MiniHUD too, so it goes from the world as well. Right-click for
   **Hide on the map only**, or turn off **Hide in MiniHUD** in the settings.
-- **Make a shape in MiniHUD from the map.** When adding a shape, switch **Make it in** to MiniHUD
-  and it becomes an ordinary MiniHUD shape, in the world as well as on the map. Map shapes are
-  flat, so it is put at your feet: circles and ellipses become spheres and ellipsoids centred
-  there, and the others become 256-block-tall prisms and boxes around it, all adjustable
-  afterwards in MiniHUD.
+- **Make a shape in MiniHUD from the map.** When adding one, switch **Make it in** to MiniHUD.
+- **Move a shape you already have into MiniHUD**, from its right-click menu or its Edit screen. It
+  becomes an ordinary MiniHUD shape and leaves this mod's map, so it is not drawn twice.
+- **Share MiniHUD shapes too.** The shared shape carries MiniHUD's own kind of shape and the height
+  it sits at: someone with MiniHUD gets the same shape in their world, and someone without it still
+  gets the outline on their map.
+
+Map shapes are flat, so one made in MiniHUD is given a height: circles and ellipses become spheres
+and ellipsoids centred where you stand, and the others become 256-block-tall prisms and boxes
+around it. All of it can be changed afterwards in MiniHUD's editor.
 
 ## Installing
 
@@ -57,7 +74,8 @@ MiniHUD is optional. When it is installed, its shapes are drawn on your map as o
 2. [Fabric API](https://modrinth.com/mod/fabric-api) and
    [Fabric Language Kotlin](https://modrinth.com/mod/fabric-language-kotlin).
 3. [Xaero's World Map](https://modrinth.com/mod/xaeros-world-map).
-4. This mod's jar, into your `mods` folder.
+4. **[This mod's jar](https://github.com/SkyStormer1/SkysMapShapes/releases/latest)**, into your
+   `mods` folder.
 
 Optional: [Xaero's Minimap](https://modrinth.com/mod/xaeros-minimap) for shapes on the minimap,
 [MiniHUD](https://modrinth.com/mod/minihud) for everything above, and
@@ -74,6 +92,7 @@ Client-side only: it does nothing on the server and works on any server you join
 | See all your shapes | **Shapes** button, top-left of the world map |
 | Edit or delete one | Right-click its outline or its label, or use the list |
 | Hide one for now | Right-click it → **Hide**, then **Show** it from the list |
+| Send one to your friends | Right-click it → **Share in chat…** |
 | Change the settings | Mod Menu → Sky's Map Shapes → cog |
 | Open the list with a key | Set one in Options → Controls → Sky's Map Shapes |
 
