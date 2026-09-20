@@ -31,7 +31,7 @@ public abstract class MinimapFBORendererMixin {
             method = "renderChunksToFBO",
             at = @At(
                     value = "FIELD",
-                    target = "Lxaero/hud/minimap/common/config/option/MinimapProfiledConfigOptions;CHUNK_GRID:Lxaero/lib/common/config/option/ConfigOption;",
+                    target = "Lxaero/hud/minimap/common/config/option/MinimapProfiledConfigOptions;CHUNK_GRID:Lxaero/lib/common/config/option/RangeConfigOption;",
                     opcode = org.objectweb.asm.Opcodes.GETSTATIC
             ),
             require = 0

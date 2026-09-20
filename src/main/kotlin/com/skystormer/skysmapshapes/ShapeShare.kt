@@ -42,7 +42,10 @@ object ShapeShare {
         else -> null
     }
 
-    /** Sends [shape] to everyone in chat. Only ever called from the Share option. */
+    /**
+     * Sends [shape] as a line of chat: to everyone, or privately to [player] when one is named.
+     * Only ever called from the Share screen, by a click.
+     */
     fun share(shape: MapShape): Boolean {
         val connection = Minecraft.getInstance().connection ?: return false
         if (asShape(shape) == null) {
@@ -55,7 +58,7 @@ object ShapeShare {
             return false
         }
         connection.sendChat(line)
-        Log.info("Shared {} in chat", shape.name)
+        Log.info("Shared {} with everyone", shape.name)
         return true
     }
 
@@ -177,6 +180,55 @@ object ShapeShare {
     /** The client-side command the add button runs. */
     const val COMMAND = "skysmapshapes"
 
-    /** What a server will take in one line of chat. */
+    /** Private messages still to send, one every [SEND_EVERY] ticks. */
+    private val waiting = ArrayDeque<Pair<String, String>>()
+
+    /**
+     * Sends [shape] privately to each of [players]. They go one at a time rather than all at
+     * once, because a burst of messages looks like spam to a server and can get you kicked.
+     */
+    fun shareWith(shape: MapShape, players: List<String>): Boolean {
+        if (Minecraft.getInstance().connection == null) return false
+        val line = message(shape).takeIf { it.isNotEmpty() } ?: return false
+        for (player in players) waiting.addLast(player to line)
+        return true
+    }
+
+    private var ticks = 0
+
+    /** Called every client tick: sends the next waiting message. */
+    fun tick() {
+        if (waiting.isEmpty()) return
+        if (++ticks < SEND_EVERY) return
+        ticks = 0
+        val connection = Minecraft.getInstance().connection ?: run { waiting.clear(); return }
+        val (player, line) = waiting.removeFirst()
+        val command = "${Config.privateShareCommand} $player $line"
+        if (command.length > MAX_COMMAND) {
+            MapMenus.say("That shape's name is too long to send privately; shorten it a little.")
+            waiting.clear()
+            return
+        }
+        connection.sendCommand(command)
+        Log.info("Sent a shape to {}", player)
+    }
+
+    /** Nothing left to send when leaving a world. */
+    fun clear() = waiting.clear()
+
+    /** Says where a shared shape went, on the action bar. */
+    fun saidWhereItWent(shape: MapShape, players: List<String>) {
+        MapMenus.say(when {
+            players.isEmpty() -> "Shared ${shape.name} with everyone"
+            players.size == 1 -> "Sent ${shape.name} to ${players[0]}"
+            else -> "Sending ${shape.name} to ${players.size} players"
+        })
+    }
+
+    /** What a server will take in one line of chat, and in one command. */
     private const val MAX_CHAT = 256
+    private const val MAX_COMMAND = 256
+
+    /** Ticks between private messages: half a second, which no server counts as spam. */
+    private const val SEND_EVERY = 10
 }

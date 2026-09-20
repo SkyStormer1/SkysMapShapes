@@ -2,6 +2,7 @@ package com.skystormer.skysmapshapes
 
 import com.skystormer.skysmapshapes.gui.ShapeEditScreen
 import com.skystormer.skysmapshapes.gui.ShapeListScreen
+import com.skystormer.skysmapshapes.gui.ShareScreen
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.ConfirmScreen
 import net.minecraft.client.gui.screens.Screen
@@ -96,21 +97,13 @@ object MapMenus {
         options.add(option("Delete…", options.size, target) { parent -> confirmDelete(parent, shape) })
     }
 
-    /** Asks first, because sharing sends a line of chat everyone can see. */
+    /** Asks who to share with first: everyone, or one player privately. */
     fun confirmShare(parent: Screen?, shape: MapShape) {
-        open(ConfirmScreen(
-            { yes ->
-                if (yes && ShapeShare.share(shape)) say("Shared ${shape.name} in chat")
-                open(parent)
-            },
-            Component.literal("Share ${shape.name} in chat?"),
-            Component.literal(
-                "Everyone on the server sees a line of chat with this shape in it. Anyone with this mod can click it to add it to their own map, in the ${ShapeShare.dimensionName(shape.dimension)}." +
-                    if (shape.fromMiniHud) " With MiniHUD, they can have it in their world too; without it, they still get the outline on their map." else ""
-            ),
-            Component.literal("Share"),
-            CommonComponents.GUI_CANCEL,
-        ))
+        if (ShapeShare.asShape(shape) == null) {
+            say("${shape.name} is a kind of shape that cannot be shared.")
+            return
+        }
+        open(ShareScreen(parent, shape))
     }
 
     /**

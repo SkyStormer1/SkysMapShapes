@@ -34,11 +34,17 @@ beacon.
   jump the map to one, edit or delete it. Hidden shapes stay listed, so they are easy to bring
   back.
 - **Share a shape with the people you play with**, the way Xaero shares a waypoint. Right-click it
-  and choose **Share in chat…**: everyone sees an ordinary line of chat, and anyone with this mod
-  sees an **[Add to my map]** button that opens the shape for them to look at before keeping it.
-  The shape carries its own dimension, so a Nether shape shared while they are in the Overworld is
-  added to their Nether map, at the Nether coordinates it had for you. Nothing is scaled, and
-  nothing is added to anyone's map without them clicking.
+  and choose **Share in chat…**, then pick who gets it:
+  - **Everyone in chat**, as one ordinary line that everyone can see.
+  - **Privately, to the players you pick.** Search the online players, tick as many as you like,
+    and each gets it as a private message that nobody else sees. They are sent one every half
+    second, so a server does not mistake it for spam.
+
+  Anyone with this mod sees an **[Add to my map]** button that opens the shape for them to look at
+  before keeping it; anyone without it just sees a line of plain text. The shape carries its own
+  dimension, so a Nether shape shared while they are in the Overworld is added to their Nether
+  map, at the Nether coordinates it had for you. Nothing is scaled, and nothing is added to
+  anyone's map without them clicking.
 - **Shapes sit under your waypoints**, and a smaller shape always draws on top of a larger one.
 - Shapes are saved per server and per dimension.
 
@@ -97,12 +103,15 @@ Client-side only: it does nothing on the server and works on any server you join
 | Open the list with a key | Set one in Options → Controls → Sky's Map Shapes |
 
 Shapes live in `config/skysmapshapes/<server>.json`, and the settings in
-`config/skysmapshapes.json`.
+`config/skysmapshapes.json`. A private share uses `/tell`; if your server uses something else, set
+`privateShareCommand` in that settings file to `msg`, `w`, or whatever it takes.
 
 ## Notes
 
 - A circle on the map is a flat slice of a sphere, taken at the height of its centre. Standing far
   above or below it, the real range at your height is smaller.
+- Shapes show on the minimap everywhere, including underground and below the Nether roof, where
+  the minimap draws from its own records rather than the world map's.
 - Shapes are drawn on the map only, never in the world. For that, make them in MiniHUD.
 
 ## Building

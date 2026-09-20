@@ -89,16 +89,16 @@ object ShapeDrawing {
      */
     @JvmStatic
     fun drawMinimapAnyMode(pose: PoseStack, renderPos: Vec3, mapDimension: ResourceKey<Level>?, buffers: XaeroBufferProvider) {
+        if (!caveHookRan) {
+            caveHookRan = true
+            Log.info("Minimap hook working (from the minimap's own data, as underground and in the Nether)")
+        }
         val alreadyDrawn = drawnFromWorldMap
         drawnFromWorldMap = false
         if (alreadyDrawn || !Config.enabled || !Config.showOnMinimap) return
         try {
             val dimension = mapDimension?.identifier()?.toString() ?: return
             val shapes = MapShapes.visibleIn(dimension).takeIf { it.isNotEmpty() } ?: return
-            if (!caveHookRan) {
-                caveHookRan = true
-                Log.info("Minimap hook working (from the minimap's own data, as underground)")
-            }
             val originX = Math.floor(renderPos.x).toInt()
             val originZ = Math.floor(renderPos.z).toInt()
             val matrix = pose.last().pose()

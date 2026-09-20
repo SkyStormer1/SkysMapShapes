@@ -63,6 +63,7 @@ object ShapesClient : ClientModInitializer {
                 ShapeStore.pruneHidden(MiniHudShapes.all.mapTo(HashSet()) { it.id })
                 ShapeStore.close()
                 MiniHudShapes.clear()
+                ShapeShare.clear()
                 ShapeHover.clear()
             }
         }
@@ -82,6 +83,7 @@ object ShapesClient : ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register { client ->
             if (!hookChecked) {
                 hookChecked = true
+                reportMinimapHooks()
                 if (hookInstalled()) Log.info("Xaero hooks installed") else Log.warn("This version of Xaero's World Map is not supported; shapes will not be drawn on it")
             }
             if (!labelsAdded) {
@@ -93,6 +95,7 @@ object ShapesClient : ClientModInitializer {
                 }
             }
             MiniHudShapes.tick(client)
+            ShapeShare.tick()
             // Hover only means anything while the world map is open.
             if (client.gui.screen()?.javaClass?.name != "xaero.map.gui.GuiMap") ShapeHover.clear()
             while (listKey.consumeClick()) {
@@ -105,6 +108,27 @@ object ShapesClient : ClientModInitializer {
      * Whether the drawing mixin made it into Xaero's map screen. It is optional, so that an
      * unsupported Xaero version costs the shapes and not the game; this is how that gets noticed.
      */
+    /**
+     * Which of the two minimap hooks made it in: the one for terrain drawn from the world map, and
+     * the one for the minimap's own (used underground and in the Nether). Both are optional, so
+     * this is how a missing one gets noticed rather than shapes quietly not appearing.
+     */
+    private fun reportMinimapHooks() {
+        if (!FabricLoader.getInstance().isModLoaded("xaerominimap")) return
+        val fromWorldMap = hasHook("xaero.common.mods.SupportXaeroWorldmap", "drawShapes")
+        val ownData = hasHook("xaero.common.minimap.render.MinimapFBORenderer", "drawShapes")
+        // Applying the class is not the same as finding the spot inside it; the drawing itself
+        // logs when it first runs, which is what proves a hook works.
+        Log.info("Minimap hook classes applied: world map's data = {}, minimap's own data = {}", fromWorldMap, ownData)
+        if (!ownData) Log.warn("This version of Xaero's Minimap is not supported underground or in the Nether; shapes will be missing there")
+    }
+
+    private fun hasHook(className: String, name: String): Boolean = try {
+        Class.forName(className).declaredMethods.any { it.name.contains(name) }
+    } catch (e: Throwable) {
+        false
+    }
+
     private fun hookInstalled(): Boolean = try {
         Class.forName("xaero.map.gui.GuiMap").declaredMethods.any { it.name.contains("drawShapes") }
     } catch (e: Throwable) {
