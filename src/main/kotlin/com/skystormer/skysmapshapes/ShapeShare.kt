@@ -9,31 +9,35 @@ import net.minecraft.network.chat.HoverEvent
 import java.util.Base64
 
 /**
- * Sharing a shape with the people you play with, the way Xaero shares a waypoint: the shape is
- * sent as a line of chat holding a short code, and anyone else with this mod sees a message they
- * can click to add it.
+ * Sharing a shape in chat, the way Xaero shares a waypoint and Sky's Structure Map shares a
+ * structure: one plain line anyone can read, such as
+ * `Map shape AFK spot: circle r128 at 250 -96 (Nether) · orange · filled`. Players without this
+ * mod see just that; anyone with it sees an [Add to my map] button beside it, which opens the shape
+ * for them to look at before keeping it. The coded form only lives in that button's command and
+ * never goes into chat. (1.2.0 and earlier put a coded string on the end of the line, which read as
+ * random letters to everyone; those old lines are still understood.)
  *
- * The code carries the shape's own dimension, so it always lands on the right map: a Nether shape
+ * The line carries the shape's own dimension, so it always lands on the right map: a Nether shape
  * shared while the other player is in the Overworld is added to their Nether map, at the Nether
  * coordinates it had here. Nothing is scaled and nothing is added without the other player
- * clicking, and a player without the mod just sees an ordinary line of chat.
+ * clicking. A MiniHUD shape also carries MiniHUD's own kind of shape and the height it sits at.
  */
 object ShapeShare {
 
-    /** The marker in a shared line of chat, followed by the code. */
+    /** Where a shared line starts. */
+    private const val START = "Map shape "
+
+    /** How 1.2.0 and earlier marked a shared line: a code followed it. */
     private const val TAG = "SMS1:"
+
+    /** Between the readable parts of a shared line. */
+    private const val SEP = " · "
 
     private val encoder: Base64.Encoder = Base64.getUrlEncoder().withoutPadding()
     private val decoder: Base64.Decoder = Base64.getUrlDecoder()
 
     /** A shared shape: the outline for the map, and what MiniHUD needs to make it in the world. */
     class Shared(val shape: Shape, val miniHudType: String?, val y: Int?)
-
-    /** The chat line for [shape]: readable to everyone, with the code on the end. */
-    fun message(shape: MapShape): String {
-        val own = asShape(shape) ?: return ""
-        return "Map shape: ${shape.name} · ${own.describeSize()} · ${dimensionName(shape.dimension)} · $TAG${encode(shape)}"
-    }
 
     /** The outline as one of our own shapes; null for one that cannot be shared, such as a line. */
     fun asShape(shape: MapShape): Shape? = when (shape) {
@@ -42,40 +46,120 @@ object ShapeShare {
         else -> null
     }
 
-    /**
-     * Sends [shape] as a line of chat: to everyone, or privately to [player] when one is named.
-     * Only ever called from the Share screen, by a click.
-     */
-    fun share(shape: MapShape): Boolean {
-        val connection = Minecraft.getInstance().connection ?: return false
-        if (asShape(shape) == null) {
-            MapMenus.say("${shape.name} is a kind of shape that cannot be shared.")
-            return false
-        }
-        val line = message(shape)
-        if (line.length > MAX_CHAT) {
-            MapMenus.say("That shape's name is too long to share; shorten it a little.")
-            return false
-        }
-        connection.sendChat(line)
-        Log.info("Shared {} with everyone", shape.name)
-        return true
+    /** What [shape] is shared as: its outline, and MiniHUD's kind and height when it came from there. */
+    fun sharedOf(shape: MapShape): Shared? {
+        val own = asShape(shape) ?: return null
+        return if (shape is MiniHudShape) Shared(own, shape.typeId, shape.centreY) else Shared(own, null, own.y)
     }
 
-    /**
-     * The shape as a short code: the same fields the shapes file keeps, with short names, plus
-     * what MiniHUD needs (its own kind of shape and the height it sits at) when it came from
-     * MiniHUD. Someone without MiniHUD simply ignores those and gets the outline on their map.
-     */
-    fun encode(source: MapShape): String {
-        val shape = asShape(source) ?: return ""
-        val json = JsonObject()
-        if (source is MiniHudShape) {
-            json.addProperty("m", source.typeId)
-            source.centreY?.let { json.addProperty("y", it) }
-        } else if (shape.y != null) {
-            json.addProperty("y", shape.y)
+    /** The chat line for [shape]: every word of it readable. Empty for one that cannot be shared. */
+    fun message(shape: MapShape): String = sharedOf(shape)?.let(::line) ?: ""
+
+    fun line(shared: Shared): String {
+        val shape = shared.shape
+        val size = when (shape.type.sized) {
+            Shape.Sized.RADIUS -> "r${num(shape.radius)}"
+            Shape.Sized.WIDTH_LENGTH -> "${num(shape.width)}x${num(shape.length)}" +
+                if (shape.type == Shape.Type.RECTANGLE && shape.anchor == Shape.Anchor.CORNER) " from corner" else ""
         }
+        val text = StringBuilder()
+        text.append(START).append(shape.name).append(": ")
+            .append(shape.type.title.lowercase()).append(' ').append(size)
+            .append(" at ").append(shape.x).append(' ').append(shape.z)
+            .append(" (").append(dimensionName(shape.dimension)).append(')')
+        text.append(SEP).append(Colours.of(shape.colour)?.title?.lowercase() ?: Colours.format(shape.colour))
+        if (shape.fill) text.append(SEP).append("filled")
+        if (shape.lineWidth != Config.DEFAULT_LINE_WIDTH) text.append(SEP).append(num(shape.lineWidth.toDouble())).append("px")
+        if (shared.miniHudType != null) {
+            text.append(SEP).append("MiniHUD ").append(shared.miniHudType)
+            shared.y?.let { text.append(" y ").append(it) }
+        } else if (shared.y != null) {
+            text.append(SEP).append("y ").append(shared.y)
+        }
+        return text.toString()
+    }
+
+    /** Numbers as plain text, the same in every language: no ".0", and a dot for decimals. */
+    private fun num(value: Double): String =
+        if (value == Math.floor(value) && Math.abs(value) < 1e15) value.toLong().toString() else value.toString()
+
+    private val LINE = Regex(
+        """^(.*): (circle|square|diamond|octagon|rectangle|ellipse) """ +
+            """(?:r(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)( from corner)?) """ +
+            """at (-?\d+) (-?\d+) \(([^)]+)\)(.*)$"""
+    )
+
+    /**
+     * A shared shape in a readable line of chat, and the part of the line to show beside its
+     * button, or null when the line holds none.
+     */
+    fun readLine(text: String): Pair<String, Shared>? {
+        val start = text.indexOf(START)
+        if (start < 0) return null
+        val m = LINE.find(text.substring(start + START.length).trimEnd()) ?: return null
+        val g = m.groupValues
+        val type = Shape.Type.entries.firstOrNull { it.title.lowercase() == g[2] } ?: return null
+        val radius = g[3].toDoubleOrNull() ?: 0.0
+        val width = g[4].toDoubleOrNull() ?: 0.0
+        val length = g[5].toDoubleOrNull() ?: 0.0
+        if (type.sized == Shape.Sized.RADIUS && radius <= 0) return null
+        if (type.sized == Shape.Sized.WIDTH_LENGTH && (width <= 0 || length <= 0)) return null
+        val dimension = when (g[9]) {
+            "Overworld" -> "minecraft:overworld"
+            "Nether" -> "minecraft:the_nether"
+            "End" -> "minecraft:the_end"
+            else -> g[9].let { if (':' in it) it else "minecraft:$it" }
+        }
+
+        var colour = Colours.RED.argb
+        var fill = false
+        var lineWidth = Config.DEFAULT_LINE_WIDTH
+        var miniHudType: String? = null
+        var y: Int? = null
+        for (part in g[10].split(SEP.trim()).map { it.trim() }.filter { it.isNotEmpty() }) {
+            when {
+                part == "filled" -> fill = true
+                part.endsWith("px") -> part.removeSuffix("px").toFloatOrNull()?.let {
+                    lineWidth = it.coerceIn(Config.MIN_LINE_WIDTH, Config.MAX_LINE_WIDTH)
+                }
+                part.startsWith("MiniHUD ") -> {
+                    val words = part.removePrefix("MiniHUD ").split(' ')
+                    miniHudType = words.firstOrNull()?.takeIf { it.isNotBlank() }
+                    if (words.size >= 3 && words[1] == "y") y = words[2].toIntOrNull()
+                }
+                part.startsWith("y ") -> y = part.removePrefix("y ").trim().toIntOrNull()
+                part.startsWith("#") -> Colours.parse(part)?.let { colour = it }
+                else -> Colours.entries.firstOrNull { it.title.equals(part, ignoreCase = true) }?.let { colour = it.argb }
+            }
+        }
+
+        val name = g[1].trim()
+        val shape = Shape(
+            label = if (name == type.title) "" else name,
+            dimension = dimension,
+            type = type,
+            x = g[7].toInt(),
+            z = g[8].toInt(),
+            radius = radius,
+            width = width,
+            length = length,
+            anchor = if (g[6].isNotEmpty()) Shape.Anchor.CORNER else Shape.Anchor.CENTRE,
+            colour = colour,
+            fill = fill,
+            lineWidth = lineWidth,
+            y = y,
+        )
+        // What to show beside the button: the line up to its dimension, without the extras.
+        val shown = text.substring(0, text.length - g[10].length).trimEnd()
+        return shown to Shared(shape, miniHudType, y)
+    }
+
+    /** The code the add button's command carries. It never goes into chat. */
+    fun encode(shared: Shared): String {
+        val shape = shared.shape
+        val json = JsonObject()
+        shared.miniHudType?.let { json.addProperty("m", it) }
+        shared.y?.let { json.addProperty("y", it) }
         json.addProperty("l", shape.label)
         json.addProperty("d", shape.dimension)
         json.addProperty("t", shape.type.name.lowercase())
@@ -104,18 +188,18 @@ object ShapeShare {
             miniHudType = json.get("m")?.asString,
             y = y,
             shape = Shape(
-            label = json.get("l")?.asString ?: "",
-            dimension = json.get("d").asString,
-            type = type,
-            x = json.get("x").asInt,
-            z = json.get("z").asInt,
-            radius = json.get("r")?.asDouble ?: 0.0,
-            width = json.get("w")?.asDouble ?: 0.0,
-            length = json.get("g")?.asDouble ?: 0.0,
-            anchor = if (json.get("a")?.asString == "corner") Shape.Anchor.CORNER else Shape.Anchor.CENTRE,
-            colour = Colours.parse(json.get("c")?.asString) ?: Colours.RED.argb,
-            fill = json.get("f") != null,
-            lineWidth = json.get("n")?.asFloat?.coerceIn(Config.MIN_LINE_WIDTH, Config.MAX_LINE_WIDTH) ?: Config.DEFAULT_LINE_WIDTH,
+                label = json.get("l")?.asString ?: "",
+                dimension = json.get("d").asString,
+                type = type,
+                x = json.get("x").asInt,
+                z = json.get("z").asInt,
+                radius = json.get("r")?.asDouble ?: 0.0,
+                width = json.get("w")?.asDouble ?: 0.0,
+                length = json.get("g")?.asDouble ?: 0.0,
+                anchor = if (json.get("a")?.asString == "corner") Shape.Anchor.CORNER else Shape.Anchor.CENTRE,
+                colour = Colours.parse(json.get("c")?.asString) ?: Colours.RED.argb,
+                fill = json.get("f") != null,
+                lineWidth = json.get("n")?.asFloat?.coerceIn(Config.MIN_LINE_WIDTH, Config.MAX_LINE_WIDTH) ?: Config.DEFAULT_LINE_WIDTH,
                 y = y,
             ),
         )
@@ -123,33 +207,50 @@ object ShapeShare {
         null
     }
 
-    /** The code in a line of chat, or null when there is none. */
+    /** The code on the end of a line from 1.2.0 or earlier, or null when there is none. */
     fun codeIn(text: String): String? {
         val start = text.indexOf(TAG)
         if (start < 0) return null
         return text.substring(start + TAG.length).trim().takeWhile { !it.isWhitespace() }.takeIf { it.isNotEmpty() }
     }
 
+    /** Sends [shape] to everyone as one line of chat. Only called from the Share screen, by a click. */
+    fun share(shape: MapShape): Boolean {
+        val connection = Minecraft.getInstance().connection ?: return false
+        val line = message(shape)
+        if (line.isEmpty()) {
+            MapMenus.say("${shape.name} is a kind of shape that cannot be shared.")
+            return false
+        }
+        if (line.length > MAX_CHAT) {
+            MapMenus.say("That shape's name is too long to share; shorten it a little.")
+            return false
+        }
+        connection.sendChat(line)
+        Log.info("Shared {} with everyone", shape.name)
+        return true
+    }
+
     /**
-     * Called for every line of chat. A shared shape is replaced by a tidy message with an add
-     * button; anything else is left alone.
+     * Called for every line of chat. A shared shape is shown as a tidy message with an add
+     * button in place of the line; anything else is left alone.
      *
      * @return whether the original line should still be shown.
      */
     fun onChat(text: String): Boolean {
         if (!Config.enabled || !Config.shareInChat) return true
-        val code = codeIn(text) ?: return true
-        val shared = decode(code) ?: return true
+        val (said, shared) = readLine(text) ?: run {
+            // A line from 1.2.0 or earlier, with the code on the end: shown without it.
+            val old = codeIn(text)?.let(::decode) ?: return true
+            text.substringBefore(TAG).trim().removeSuffix("·").trim() to old
+        }
         val shape = shared.shape
-        // Who sent it, as chat shows it, without our code on the end.
-        val said = text.substringBefore(TAG).trim().removeSuffix("·").trim()
-        // Shown as a system message of our own, in place of the line that carried the code.
         Minecraft.getInstance().gui.chatListener().handleSystemMessage(
             Component.literal("$said  ").append(
                 Component.literal("[Add to my map]")
                     .withStyle {
                         it.withColor(shape.colour and 0xFFFFFF).withBold(true)
-                            .withClickEvent(ClickEvent.RunCommand("/$COMMAND $code"))
+                            .withClickEvent(ClickEvent.RunCommand("/$COMMAND ${encode(shared)}"))
                             .withHoverEvent(HoverEvent.ShowText(Component.literal(
                                 "${shape.name}\n${shape.describeSize()}\n${shape.describePosition()}\n${dimensionName(shape.dimension)}" +
                                     (if (shared.miniHudType != null && MiniHudShapes.installed) "\nMade in MiniHUD as well, if you want" else "") +

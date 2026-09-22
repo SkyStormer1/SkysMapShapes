@@ -40,8 +40,10 @@ beacon.
     and each gets it as a private message that nobody else sees. They are sent one every half
     second, so a server does not mistake it for spam.
 
-  Anyone with this mod sees an **[Add to my map]** button that opens the shape for them to look at
-  before keeping it; anyone without it just sees a line of plain text. The shape carries its own
+  The line is plain words anyone can read, such as
+  `Map shape AFK spot: circle r128 at 250 -96 (Nether) · orange`. Anyone with this mod sees an
+  **[Add to my map]** button beside it that opens the shape for them to look at before keeping it;
+  anyone without it just reads the line. The shape carries its own
   dimension, so a Nether shape shared while they are in the Overworld is added to their Nether
   map, at the Nether coordinates it had for you. Nothing is scaled, and nothing is added to
   anyone's map without them clicking.
