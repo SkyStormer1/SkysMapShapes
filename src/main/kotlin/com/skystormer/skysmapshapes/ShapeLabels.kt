@@ -114,6 +114,18 @@ object ShapeLabels {
         override fun shouldRender(location: ElementRenderLocation, pre: Boolean): Boolean =
             location == ElementRenderLocation.WORLD_MAP && Config.enabled && Config.showOnWorldMap && Config.showLabels
 
+        /**
+         * Xaero divides an element's position by the dimension scale, because its own waypoints are
+         * kept in the coordinates of the dimension you are standing in and have to be converted to
+         * the one the map is showing. These labels are already read from the dimension being shown
+         * ([shapesOnWorldMap] asks the map for it), so there is nothing to convert, and letting
+         * Xaero convert them anyway threw every label eight times too far out whenever the map was
+         * switched to a dimension other than the one you were in. The outlines never moved, because
+         * `ShapeDrawing` draws them from the camera rather than through the element system — so the
+         * labels simply detached from their shapes.
+         */
+        override fun shouldBeDimScaled(): Boolean = false
+
         override fun preRender(info: ElementRenderInfo, buffers: XaeroBufferProvider, renderers: MultiTextureRenderTypeRendererProvider, pre: Boolean) {
         }
 
