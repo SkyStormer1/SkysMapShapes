@@ -92,11 +92,10 @@ object MapMenus {
         })
         options.add(option("Share in chat…", options.size, target) { parent -> confirmShare(parent, shape) })
         if (MiniHudShapes.installed && Config.showMiniHud) {
-            val why = whyNotMoveToMiniHud(shape)
-            val label = if (why == null) "Move into MiniHUD…"
-                else "Move into MiniHUD: go to the ${ShapeShare.dimensionName(shape.dimension)}"
-            options.add(option(label, options.size, target) { parent -> confirmMoveToMiniHud(parent, shape) }
-                .setActive(why == null))
+            // Greyed out from another dimension. Xaero's menu has no hover text, so the reason
+            // lives on the Edit screen's button instead of stretching this line.
+            options.add(option("Move into MiniHUD…", options.size, target) { parent -> confirmMoveToMiniHud(parent, shape) }
+                .setActive(whyNotMoveToMiniHud(shape) == null))
         }
         options.add(option("Delete…", options.size, target) { parent -> confirmDelete(parent, shape) })
     }
