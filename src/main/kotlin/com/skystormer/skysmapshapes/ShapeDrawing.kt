@@ -21,9 +21,8 @@ import kotlin.math.sqrt
  */
 object ShapeDrawing {
 
-    /** Whether Xaero's world map has called in at least once; logged if it never does. */
-    var worldMapHookRan = false
-        private set
+    /** Whether Xaero's world map has called in at least once, so it is said once only. */
+    private var worldMapHookRan = false
 
     @JvmStatic
     fun drawWorldMap(

@@ -3,6 +3,7 @@ package com.skystormer.skysmapshapes.mixin;
 import com.llamalad7.mixinextras.sugar.Local;
 import com.skystormer.skysmapshapes.MapCamera;
 import com.skystormer.skysmapshapes.MapMenus;
+import com.skystormer.skysmapshapes.MenuTips;
 import com.skystormer.skysmapshapes.ShapeDrawing;
 import com.skystormer.skysmapshapes.ShapeHover;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -102,6 +103,8 @@ public abstract class GuiMapMixin implements MapCamera {
     @Inject(method = "extractRenderState", at = @At("TAIL"), require = 0)
     private void skysmapshapes$drawTooltip(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick, CallbackInfo ci) {
         if (viewed == null && rightClickMenu == null) ShapeHover.INSTANCE.drawTooltip(graphics, mouseX, mouseY);
+        // Hover text for the lines this mod adds to the menu, which Xaero's own options cannot carry.
+        MenuTips.INSTANCE.draw(graphics, mouseX, mouseY, rightClickMenu);
     }
 
     /**

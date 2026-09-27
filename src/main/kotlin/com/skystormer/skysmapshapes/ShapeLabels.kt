@@ -5,7 +5,6 @@ import net.minecraft.client.gui.screens.Screen
 import net.minecraft.network.chat.Component
 import xaero.lib.client.graphics.XaeroBufferProvider
 import xaero.lib.client.gui.widget.Tooltip
-import xaero.map.WorldMapSession
 import xaero.map.element.MapElementGraphics
 import xaero.map.element.render.ElementReader
 import xaero.map.element.render.ElementRenderInfo
@@ -45,8 +44,7 @@ object ShapeLabels {
 
     private fun shapesOnWorldMap(): List<MapShape> {
         if (!Config.enabled || !Config.showOnWorldMap || !Config.showLabels) return emptyList()
-        val dimension = WorldMapSession.getCurrentSession()?.mapProcessor?.mapWorld?.currentDimension?.dimId
-            ?.identifier()?.toString() ?: return emptyList()
+        val dimension = Dimensions.ofMap() ?: return emptyList()
         return MapShapes.visibleIn(dimension)
     }
 
@@ -83,9 +81,9 @@ object ShapeLabels {
         override fun getRenderBoxRight(shape: MapShape, context: Context, partialTicks: Float): Int = halfWidth(shape) + 1
         override fun getRenderBoxTop(shape: MapShape, context: Context, partialTicks: Float): Int = -HEIGHT - GAP - 1 - lift(shape, context)
         override fun getRenderBoxBottom(shape: MapShape, context: Context, partialTicks: Float): Int = 1
-        override fun getLeftSideLength(shape: MapShape, minecraft: Minecraft): Int = minecraft.font.width(nameOf(shape)) + 9
-        override fun getMenuName(shape: MapShape): String = nameOf(shape)
-        override fun getFilterName(shape: MapShape): String = nameOf(shape)
+        override fun getLeftSideLength(shape: MapShape, minecraft: Minecraft): Int = minecraft.font.width(shape.name) + 9
+        override fun getMenuName(shape: MapShape): String = shape.name
+        override fun getFilterName(shape: MapShape): String = shape.name
         override fun getMenuTextFillLeftPadding(shape: MapShape): Int = 0
         override fun getRightClickTitleBackgroundColor(shape: MapShape): Int = shape.colour
         override fun shouldScaleBoxWithOptionalScale(): Boolean = true
@@ -95,7 +93,7 @@ object ShapeLabels {
 
         override fun getRightClickOptions(shape: MapShape, target: IRightClickableElement): ArrayList<RightClickOption> {
             val options = ArrayList<RightClickOption>()
-            options.add(object : RightClickOption(nameOf(shape), 0, target) {
+            options.add(object : RightClickOption(shape.name, 0, target) {
                 override fun onAction(screen: Screen) {}
             })
             MapMenus.addShapeOptions(options, target, shape)
@@ -168,9 +166,7 @@ object ShapeLabels {
         return true
     }
 
-    fun nameOf(shape: MapShape): String = shape.name
-
-    fun describe(shape: MapShape): Component = Component.literal(nameOf(shape)).append(
+    fun describe(shape: MapShape): Component = Component.literal(shape.name).append(
         Component.literal("\n${shape.describeSize()}\n${shape.describePosition()}\n" + if (shape.fromMiniHud) "From MiniHUD · right-click to edit or hide" else "Right-click to edit or delete")
             .withStyle { it.withColor(0xDDDDDD) }
     )

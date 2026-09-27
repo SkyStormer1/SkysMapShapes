@@ -2,12 +2,12 @@ package com.skystormer.skysmapshapes.gui
 
 import com.skystormer.skysmapshapes.Colours
 import com.skystormer.skysmapshapes.Config
+import com.skystormer.skysmapshapes.Dimensions
 import com.skystormer.skysmapshapes.MapMenus
 import com.skystormer.skysmapshapes.MiniHudShapes
 import com.skystormer.skysmapshapes.Shape
 import com.skystormer.skysmapshapes.ShapeShare
 import com.skystormer.skysmapshapes.ShapeStore
-import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.components.CycleButton
 import net.minecraft.client.gui.components.EditBox
@@ -53,7 +53,7 @@ class ShapeEditScreen private constructor(
 
     /** A new shape can be made in MiniHUD instead, when MiniHUD is installed. */
     private var inMiniHud = sharedMiniHudType != null && MiniHudShapes.installed && Config.showMiniHud &&
-        Minecraft.getInstance().player?.level()?.dimension()?.identifier()?.toString() == dimension
+        Dimensions.ofPlayer() == dimension
 
     private var xText = x.toString()
     private var zText = z.toString()
@@ -64,7 +64,7 @@ class ShapeEditScreen private constructor(
     private var message: Component =
         if (existing == null && template != null)
             Component.literal(
-                "Shared with you, for the ${ShapeShare.dimensionName(template.dimension)}. " +
+                "Shared with you, for the ${Dimensions.name(template.dimension)}. " +
                     if (sharedMiniHudType != null && MiniHudShapes.installed) "It came from MiniHUD, so it can go in your world too."
                     else "Add keeps it on your map."
             )
@@ -185,7 +185,7 @@ class ShapeEditScreen private constructor(
 
         // Where a new shape goes: here, or MiniHUD, which draws it in the world too.
         if (existing == null && MiniHudShapes.installed && Config.showMiniHud) {
-            val inThisDimension = minecraft.player?.level()?.dimension()?.identifier()?.toString() == dimension
+            val inThisDimension = Dimensions.ofPlayer() == dimension
             addRenderableWidget(
                 CycleButton.builder<Boolean>({ Component.literal(if (it) "Make it in MiniHUD" else "Make it in Sky's Map Shapes") }, inMiniHud)
                     .withValues(listOf(false, true))
@@ -269,7 +269,7 @@ class ShapeEditScreen private constructor(
 
     /** The waypoints on Xaero's world map for this dimension, as names and block positions. */
     private fun waypoints(): List<Triple<String, Int, Int>> = try {
-        if (!SupportMods.minimap() || MapMenus.mapDimension() != dimension) emptyList()
+        if (!SupportMods.minimap() || Dimensions.ofMap() != dimension) emptyList()
         else SupportMods.xaeroMinimap.waypointsSorted.orEmpty()
             .map { Triple(it.name, floor(it.renderX).toInt(), floor(it.renderZ).toInt()) }
     } catch (e: Throwable) {
@@ -285,10 +285,7 @@ class ShapeEditScreen private constructor(
 
     private fun useMyPosition() {
         val player = minecraft.player ?: return
-        if (player.level().dimension().identifier().toString() != dimension) {
-            show("You are in another dimension from this map.")
-            return
-        }
+        if (Dimensions.ofPlayer() != dimension) return show("You are in another dimension from this map.")
         xBox.value = player.blockX.toString()
         zBox.value = player.blockZ.toString()
         show("Using where you stand: ${player.blockX}, ${player.blockZ}.")
@@ -362,10 +359,8 @@ class ShapeEditScreen private constructor(
     }
 
     /** The height a shape made in MiniHUD is put at: where you stand, or the sea level if elsewhere. */
-    private fun playerY(): Int {
-        val player = minecraft.player ?: return 64
-        return if (player.level().dimension().identifier().toString() == dimension) player.blockY else 64
-    }
+    private fun playerY(): Int =
+        if (Dimensions.ofPlayer() == dimension) minecraft.player?.blockY ?: 64 else 64
 
     private fun size(text: String): Double? = text.trim().toDoubleOrNull()?.takeIf { it > 0 && it <= MAX_SIZE }
 

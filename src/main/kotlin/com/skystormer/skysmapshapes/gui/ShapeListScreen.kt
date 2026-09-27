@@ -1,7 +1,7 @@
 package com.skystormer.skysmapshapes.gui
 
 import com.skystormer.skysmapshapes.Config
-import com.skystormer.skysmapshapes.Geometry
+import com.skystormer.skysmapshapes.Dimensions
 import com.skystormer.skysmapshapes.MapShape
 import com.skystormer.skysmapshapes.MapShapes
 import com.skystormer.skysmapshapes.MiniHudShape
@@ -10,7 +10,6 @@ import com.skystormer.skysmapshapes.Log
 import com.skystormer.skysmapshapes.MapCamera
 import com.skystormer.skysmapshapes.MapMenus
 import com.skystormer.skysmapshapes.Shape
-import com.skystormer.skysmapshapes.ShapeLabels
 import com.skystormer.skysmapshapes.ShapeStore
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.AbstractWidget
@@ -131,7 +130,7 @@ class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("S
 
         // From the world map, Go to moves it; from anywhere else, it opens the map there. Either
         // way only for shapes in the dimension that map shows.
-        val mapDimension = if (parent is MapCamera) MapMenus.mapDimension() else playerDimension()
+        val mapDimension = if (parent is MapCamera) Dimensions.ofMap() else Dimensions.ofPlayer()
         val buttonWidth = 40
         val buttons = 4
         val textWidth = listWidth - (buttonWidth + GAP) * buttons
@@ -143,14 +142,14 @@ class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("S
             val details = buildString {
                 if (shape.fromMiniHud) append("MiniHUD · ")
                 if (!shape.visible) append("hidden · ")
-                append(shortSize(shape))
-                if (allDimensions) append(" · ").append(dimensionName(shape.dimension))
+                append(shape.describeSizeShort())
+                if (allDimensions) append(" · ").append(Dimensions.name(shape.dimension))
                 distanceTo(shape)?.let { append(" · ").append(it).append(" away") }
             }
             val line = name.copy().append(Component.literal("  $details").withStyle { it.withColor(DETAILS) })
             val text = StringWidget(left, y + 6, textWidth - GAP, font.lineHeight, line, font)
             text.setTooltip(Tooltip.create(Component.literal(
-                "${shape.name}\n${shape.describeSize()}\n${shape.describePosition()}\n${dimensionName(shape.dimension)}" +
+                "${shape.name}\n${shape.describeSize()}\n${shape.describePosition()}\n${Dimensions.name(shape.dimension)}" +
                     (if (shape is Shape) "\nThickness ${ThicknessSlider.format(shape.lineWidth)}" else "\nFrom MiniHUD: Edit opens it in MiniHUD")
             )))
             row(text)
@@ -171,7 +170,7 @@ class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("S
             val go = Button.builder(Component.literal("Go to")) { goTo(shape) }.bounds(x, y, buttonWidth, ROW)
                 .tooltip(Tooltip.create(Component.literal(
                     if (shape.dimension == mapDimension) "Show this shape on the world map."
-                    else "This shape is in the ${dimensionName(shape.dimension)}: go there to see it on the map."
+                    else "This shape is in the ${Dimensions.name(shape.dimension)}: go there to see it on the map."
                 )))
                 .build()
             go.active = mapDimension != null && shape.dimension == mapDimension
@@ -186,7 +185,7 @@ class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("S
             }.bounds(x, y, buttonWidth, ROW)
             if (miniHud != null) edit.tooltip(Tooltip.create(Component.literal(
                 if (miniHud.editable) "Open this shape in MiniHUD's Shape Editor."
-                else "Go to the ${dimensionName(shape.dimension)} to edit it: MiniHUD only edits shapes in the dimension you are in."
+                else "Go to the ${Dimensions.name(shape.dimension)} to edit it: MiniHUD only edits shapes in the dimension you are in."
             )))
             row(edit.build().also { it.active = own != null || miniHud?.editable == true })
             x += buttonWidth + GAP
@@ -230,26 +229,23 @@ class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("S
         }
     }
 
-    private fun playerDimension(): String? = minecraft.player?.level()?.dimension()?.identifier()?.toString()
-
     private fun addHere() {
         val player = minecraft.player ?: return
-        val dimension = player.level().dimension().identifier().toString()
+        val dimension = Dimensions.ofPlayer() ?: return
         minecraft.gui.setScreen(ShapeEditScreen.forNew(this, dimension, player.blockX, player.blockZ, ""))
     }
 
     /** Whole blocks from you to the shape's centre, when you are in its dimension. */
     private fun distanceTo(shape: MapShape): String? {
         val player = minecraft.player ?: return null
-        if (player.level().dimension().identifier().toString() != shape.dimension) return null
+        if (Dimensions.ofPlayer() != shape.dimension) return null
         val b = shape.bounds
         return hypot(b.centreX - player.x, b.centreZ - player.z).toInt().toString()
     }
 
     /** The world map's dimension if it is open behind this, else the one you are in. */
     private fun currentDimension(): String? =
-        (if (parent is MapCamera) MapMenus.mapDimension() else null)
-            ?: minecraft.player?.level()?.dimension()?.identifier()?.toString()
+        (if (parent is MapCamera) Dimensions.ofMap() else null) ?: Dimensions.ofPlayer()
 
     /** A dark panel behind everything, so the text reads over any background. */
     override fun extractBackground(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
@@ -271,31 +267,6 @@ class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("S
     }
 
     companion object {
-        fun dimensionName(dimension: String): String = when (dimension) {
-            "minecraft:overworld" -> "Overworld"
-            "minecraft:the_nether" -> "Nether"
-            "minecraft:the_end" -> "End"
-            else -> dimension.removePrefix("minecraft:")
-        }
-
-        /** "circle r128", "square 64", "48 × 32": short enough for a list row. */
-        fun shortSize(shape: MapShape): String {
-            if (shape !is Shape) {
-                val g = shape.geometry
-                val b = shape.bounds
-                return if (g is Geometry.Circle) "circle r${Shape.number(g.radius)}"
-                else "${Shape.number(b.maxX - b.minX)} × ${Shape.number(b.maxZ - b.minZ)}"
-            }
-            return when (shape.type) {
-                Shape.Type.CIRCLE -> "circle r${Shape.number(shape.radius)}"
-                Shape.Type.SQUARE -> "square ${Shape.number(shape.radius * 2)}"
-                Shape.Type.RHOMBUS -> "diamond r${Shape.number(shape.radius)}"
-                Shape.Type.OCTAGON -> "octagon r${Shape.number(shape.radius)}"
-                Shape.Type.RECTANGLE -> "${Shape.number(shape.width)} × ${Shape.number(shape.length)}"
-                Shape.Type.ELLIPSE -> "ellipse ${Shape.number(shape.width)} × ${Shape.number(shape.length)}"
-            }
-        }
-
         private const val MAX_WIDTH = 420
         private const val DETAILS = 0xE0E0E0
         private const val HIDDEN = 0xB0B0B0

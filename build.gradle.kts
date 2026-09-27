@@ -119,11 +119,6 @@ tasks.jar {
     from("LICENSE") { rename { "${it}_${base.archivesName.get()}" } }
 }
 
-// Optional: run the dev client on another Java, e.g. the one a launcher uses, with -PrunJava=<path to java>.
-tasks.withType<JavaExec>().configureEach {
-    findProperty("runJava")?.let { setExecutable(it.toString()) }
-}
-
 // Optional: -PnotIde, for testing with MiniHUD. Its library MaLiLib turns on Minecraft's
 // IS_RUNNING_IN_IDE in any development environment, and the stricter render checks that brings
 // crash the game on some graphics drivers. This asks the mod to turn it back off (dev only).

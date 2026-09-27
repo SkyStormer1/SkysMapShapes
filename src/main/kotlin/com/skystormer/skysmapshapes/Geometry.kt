@@ -171,7 +171,12 @@ interface MapShape {
     /** The label, or what kind of shape it is when it has none. */
     val name: String
 
+    /** "Circle, radius 128": for tooltips and details. */
     fun describeSize(): String
+
+    /** "circle r128": short enough for a row in the shapes list. */
+    fun describeSizeShort(): String
+
     fun describePosition(): String
 
     val bounds: Geometry.Bounds get() = geometry.bounds

@@ -1,6 +1,7 @@
 package com.skystormer.skysmapshapes.gui
 
 import com.skystormer.skysmapshapes.Config
+import com.skystormer.skysmapshapes.Dimensions
 import com.skystormer.skysmapshapes.MapShape
 import com.skystormer.skysmapshapes.ShapeShare
 import net.minecraft.client.gui.GuiGraphicsExtractor
@@ -42,7 +43,7 @@ class ShareScreen(private val parent: Screen?, private val shape: MapShape) :
         addRenderableWidget(StringWidget(left, y, WIDTH, font.lineHeight, title, font))
         y += font.lineHeight + GAP
         addRenderableWidget(StringWidget(left, y, WIDTH, font.lineHeight,
-            Component.literal("${shape.describeSize()} · ${ShapeShare.dimensionName(shape.dimension)}")
+            Component.literal("${shape.describeSize()} · ${Dimensions.name(shape.dimension)}")
                 .withStyle { it.withColor(0xBBBBBB) }, font))
         y += font.lineHeight + GAP * 3
 

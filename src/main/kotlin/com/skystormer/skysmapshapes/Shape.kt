@@ -90,13 +90,26 @@ data class Shape(
             if (anchor == Anchor.CORNER) " from its north-west corner" else ""
     }
 
+    /** "circle r128", "48 × 32": short enough for a row in the shapes list. */
+    override fun describeSizeShort(): String = when (type) {
+        Type.CIRCLE -> "circle r${number(radius)}"
+        Type.SQUARE -> "square ${number(radius * 2)}"
+        Type.RHOMBUS -> "diamond r${number(radius)}"
+        Type.OCTAGON -> "octagon r${number(radius)}"
+        Type.RECTANGLE -> "${number(width)} × ${number(length)}"
+        Type.ELLIPSE -> "ellipse ${number(width)} × ${number(length)}"
+    }
+
     /** "Centred on 100, -40", or where a corner-anchored rectangle starts. */
     override fun describePosition(): String =
         if (type == Type.RECTANGLE && anchor == Anchor.CORNER) "North-west corner at $x, $z" else "Centred on $x, $z"
 
     companion object {
-        /** Whole numbers without ".0". */
+        /**
+         * A number as plain text: no ".0" on whole ones, a dot for decimals whatever the
+         * language, since these are read by people and by other copies of this mod.
+         */
         fun number(value: Double): String =
-            if (value == Math.floor(value) && value < 1e15) value.toLong().toString() else "%.1f".format(value)
+            if (value == Math.floor(value) && Math.abs(value) < 1e15) value.toLong().toString() else value.toString()
     }
 }

@@ -10,7 +10,6 @@ import net.minecraft.network.chat.CommonComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.ResourceKey
 import net.minecraft.world.level.Level
-import xaero.map.WorldMapSession
 import xaero.map.gui.IRightClickableElement
 import xaero.map.gui.dropdown.rightclick.RightClickOption
 import xaero.map.mods.gui.Waypoint
@@ -27,7 +26,7 @@ object MapMenus {
     fun addMapOptions(options: ArrayList<RightClickOption>, target: IRightClickableElement, screen: Screen, x: Int, z: Int, dimension: ResourceKey<Level>?) {
         if (!Config.enabled) return
         guard {
-            val dim = dimension?.identifier()?.toString() ?: mapDimension()
+            val dim = dimension?.identifier()?.toString() ?: Dimensions.ofMap()
                 ?: return@guard Log.warn("Map right-click: no dimension, so no shape options")
             if (!ShapeStore.isOpen) return@guard Log.warn("Map right-click: no shapes file open (not in a world?)")
             options.add(option("Add shape here", options.size, target) { parent ->
@@ -36,7 +35,7 @@ object MapMenus {
             // Every shape under the click can be edited from here, even one whose label is off screen.
             val under = ShapeStore.inDimension(dim).filter { it.contains(x, z) }
             for (shape in under.take(MAX_UNDER_CLICK)) {
-                options.add(option("Edit shape: ${ShapeLabels.nameOf(shape)}", options.size, target) { parent ->
+                options.add(option("Edit shape: ${shape.name}", options.size, target) { parent ->
                     ShapeStore.byId(shape.id)?.let { open(ShapeEditScreen.forExisting(parent, it)) }
                 })
             }
@@ -49,7 +48,7 @@ object MapMenus {
     fun addWaypointOptions(options: ArrayList<RightClickOption>, target: IRightClickableElement, waypoint: Waypoint) {
         if (!Config.enabled) return
         guard {
-            val dim = mapDimension() ?: return@guard Log.warn("Waypoint right-click: no map dimension, so no shape option")
+            val dim = Dimensions.ofMap() ?: return@guard Log.warn("Waypoint right-click: no map dimension, so no shape option")
             if (!ShapeStore.isOpen) return@guard Log.warn("Waypoint right-click: no shapes file open (not in a world?)")
             // The waypoint's position on the map being shown, which for one from another
             // dimension is already scaled (overworld ↔ nether) by Xaero.
@@ -65,8 +64,12 @@ object MapMenus {
     /** A shape's label or outline on the world map. MiniHUD's can only be hidden here. */
     fun addShapeOptions(options: ArrayList<RightClickOption>, target: IRightClickableElement, shape: MapShape) {
         if (shape is MiniHudShape) {
-            options.add(option("Edit in MiniHUD…", options.size, target) { parent -> MiniHudShapes.openEditor(shape, parent) }
-                .setActive(shape.editable))
+            options.add(option(
+                "Edit in MiniHUD…", options.size, target,
+                tip = if (shape.editable) "Opens this shape in MiniHUD's own Shape Editor."
+                else "MiniHUD can only edit shapes in the dimension you are in.\n" +
+                    "Go to the ${Dimensions.name(shape.dimension)} to edit this one.",
+            ) { parent -> MiniHudShapes.openEditor(shape, parent) }.setActive(shape.editable))
             options.add(option(if (Config.hideInMiniHud && shape.editable) "Hide, in MiniHUD too" else "Hide on the map", options.size, target) { _ ->
                 ShapeStore.setVisible(shape, false)
                 say("Hid ${shape.name}. Show it again from the Shapes list.")
@@ -92,10 +95,13 @@ object MapMenus {
         })
         options.add(option("Share in chat…", options.size, target) { parent -> confirmShare(parent, shape) })
         if (MiniHudShapes.installed && Config.showMiniHud) {
-            // Greyed out from another dimension. Xaero's menu has no hover text, so the reason
-            // lives on the Edit screen's button instead of stretching this line.
-            options.add(option("Move into MiniHUD…", options.size, target) { parent -> confirmMoveToMiniHud(parent, shape) }
-                .setActive(whyNotMoveToMiniHud(shape) == null))
+            // Greyed out from another dimension, and the line itself says why on hover.
+            val why = whyNotMoveToMiniHud(shape)
+            options.add(option(
+                "Move into MiniHUD…", options.size, target,
+                tip = "Turn this into a MiniHUD shape, shown in the world as well as on the map." +
+                    if (why != null) "\n" + why else "",
+            ) { parent -> confirmMoveToMiniHud(parent, shape) }.setActive(why == null))
         }
         options.add(option("Delete…", options.size, target) { parent -> confirmDelete(parent, shape) })
     }
@@ -160,35 +166,23 @@ object MapMenus {
             { yes ->
                 if (yes) {
                     ShapeStore.remove(shape.id)
-                    say("Deleted ${ShapeLabels.nameOf(shape)}")
+                    say("Deleted ${shape.name}")
                 }
                 open(parent)
             },
-            Component.literal("Delete ${ShapeLabels.nameOf(shape)}?"),
+            Component.literal("Delete ${shape.name}?"),
             Component.literal("${shape.describeSize()}, ${shape.describePosition().replaceFirstChar { it.lowercase() }}. This cannot be undone."),
         ))
     }
-
-    /** The dimension you are standing in, which is the only one MiniHUD holds shapes for. */
-    fun playerDimension(): String? =
-        Minecraft.getInstance().player?.level()?.dimension()?.identifier()?.toString()
-
-    /** Whether [shape] can be moved into MiniHUD from where you are. */
-    fun canMoveToMiniHud(shape: Shape): Boolean =
-        MiniHudShapes.installed && Config.showMiniHud && playerDimension() == shape.dimension
 
     /** Why a shape cannot be moved into MiniHUD, for a tooltip; null when it can. */
     fun whyNotMoveToMiniHud(shape: Shape): String? = when {
         !MiniHudShapes.installed -> "MiniHUD is not installed."
         !Config.showMiniHud -> "MiniHUD shapes are switched off in the settings."
-        playerDimension() != shape.dimension ->
-            "Go to the ${ShapeShare.dimensionName(shape.dimension)} first: MiniHUD only holds shapes for the dimension you are in."
+        Dimensions.ofPlayer() != shape.dimension ->
+            "Go to the ${Dimensions.name(shape.dimension)} first: MiniHUD only holds shapes for the dimension you are in."
         else -> null
     }
-
-    /** The dimension Xaero's world map is showing. */
-    fun mapDimension(): String? =
-        WorldMapSession.getCurrentSession()?.mapProcessor?.mapWorld?.currentDimension?.dimId?.identifier()?.toString()
 
     fun open(screen: Screen?) {
         Minecraft.getInstance().gui.setScreen(screen)
@@ -199,10 +193,9 @@ object MapMenus {
         Minecraft.getInstance().player?.sendOverlayMessage(Component.literal(message))
     }
 
-    fun option(name: String, index: Int, target: IRightClickableElement, action: (Screen) -> Unit) =
-        object : RightClickOption(name, index, target) {
-            override fun onAction(screen: Screen) = action(screen)
-        }
+    /** A line in a right-click menu, with [tip] shown while the mouse is over it. */
+    fun option(name: String, index: Int, target: IRightClickableElement, tip: String? = null, action: (Screen) -> Unit) =
+        MenuTips.TipOption(name, index, target, tip, action)
 
     private inline fun guard(block: () -> Unit) {
         try {

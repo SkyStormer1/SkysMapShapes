@@ -118,6 +118,30 @@ class ShareTest {
         assertNotNull(ShapeShare.decode(ShapeShare.codeIn(old)!!))
     }
 
+    /**
+     * The message shown in place of a shared line reads as a shared shape itself, so the chat
+     * hook has to stop there rather than replacing its own message for ever (it crashed the game).
+     */
+    @Test
+    fun theMessageShownInsteadStillReadsAsTheSameShape() {
+        val (shown, _) = ShapeShare.readLine("<Steve> " + ShapeShare.message(shape()))!!
+        val again = ShapeShare.readLine(shown)
+        assertNotNull(again, "the tidy message parses too, so onChat must not act on its own output")
+        assertEquals(shape().radius, again!!.second.shape.radius)
+    }
+
+    /** Chat carries anything at all, and reading it must never take a noticeable amount of time. */
+    @Test
+    fun aLongLineThatIsNotOneOfOursIsTurnedDownQuickly() {
+        val awkward = "Map shape " + "a: circle ".repeat(40) + " and then some words"
+        val started = System.nanoTime()
+        ShapeShare.readLine(awkward)
+        ShapeShare.readLine("Map shape " + "x".repeat(400))
+        ShapeShare.readLine("Map shape : circle r at at at (((")
+        val tookMillis = (System.nanoTime() - started) / 1_000_000
+        assertTrue(tookMillis < 100, "reading three awkward lines took $tookMillis ms")
+    }
+
     @Test
     fun ordinaryChatIsLeftAlone() {
         assertNull(ShapeShare.readLine("hey, look at the map shape by the gold farm"))

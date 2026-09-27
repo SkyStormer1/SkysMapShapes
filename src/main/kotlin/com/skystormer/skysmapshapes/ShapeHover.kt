@@ -64,7 +64,6 @@ object ShapeHover {
     fun rightClickTarget(): IRightClickableElement? {
         if (!Config.enabled) return null
         val shapes = hovered.takeIf { it.isNotEmpty() } ?: return null
-        Log.info("Right-clicked the outline of {}", shapes.joinToString { it.name })
         return Target(shapes)
     }
 

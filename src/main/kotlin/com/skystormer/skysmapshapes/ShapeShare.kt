@@ -55,21 +55,21 @@ object ShapeShare {
     /** The chat line for [shape]: every word of it readable. Empty for one that cannot be shared. */
     fun message(shape: MapShape): String = sharedOf(shape)?.let(::line) ?: ""
 
-    fun line(shared: Shared): String {
+    private fun line(shared: Shared): String {
         val shape = shared.shape
         val size = when (shape.type.sized) {
-            Shape.Sized.RADIUS -> "r${num(shape.radius)}"
-            Shape.Sized.WIDTH_LENGTH -> "${num(shape.width)}x${num(shape.length)}" +
+            Shape.Sized.RADIUS -> "r${Shape.number(shape.radius)}"
+            Shape.Sized.WIDTH_LENGTH -> "${Shape.number(shape.width)}x${Shape.number(shape.length)}" +
                 if (shape.type == Shape.Type.RECTANGLE && shape.anchor == Shape.Anchor.CORNER) " from corner" else ""
         }
         val text = StringBuilder()
         text.append(START).append(shape.name).append(": ")
             .append(shape.type.title.lowercase()).append(' ').append(size)
             .append(" at ").append(shape.x).append(' ').append(shape.z)
-            .append(" (").append(dimensionName(shape.dimension)).append(')')
+            .append(" (").append(Dimensions.name(shape.dimension)).append(')')
         text.append(SEP).append(Colours.of(shape.colour)?.title?.lowercase() ?: Colours.format(shape.colour))
         if (shape.fill) text.append(SEP).append("filled")
-        if (shape.lineWidth != Config.DEFAULT_LINE_WIDTH) text.append(SEP).append(num(shape.lineWidth.toDouble())).append("px")
+        if (shape.lineWidth != Config.DEFAULT_LINE_WIDTH) text.append(SEP).append(Shape.number(shape.lineWidth.toDouble())).append("px")
         if (shared.miniHudType != null) {
             text.append(SEP).append("MiniHUD ").append(shared.miniHudType)
             shared.y?.let { text.append(" y ").append(it) }
@@ -79,36 +79,73 @@ object ShapeShare {
         return text.toString()
     }
 
-    /** Numbers as plain text, the same in every language: no ".0", and a dot for decimals. */
-    private fun num(value: Double): String =
-        if (value == Math.floor(value) && Math.abs(value) < 1e15) value.toLong().toString() else value.toString()
+    /** The words for each kind of shape, as [line] writes them. */
+    private val KINDS: Map<String, Shape.Type> = Shape.Type.entries.associateBy { it.title.lowercase() }
 
-    private val LINE = Regex(
-        """^(.*): (circle|square|diamond|octagon|rectangle|ellipse) """ +
-            """(?:r(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)( from corner)?) """ +
-            """at (-?\d+) (-?\d+) \(([^)]+)\)(.*)$"""
-    )
+    private const val CORNER = " from corner"
+    private const val AT = " at "
 
     /**
      * A shared shape in a readable line of chat, and the part of the line to show beside its
      * button, or null when the line holds none.
+     *
+     * Read piece by piece rather than with one big pattern: chat carries anything anyone types,
+     * and a pattern loose enough to find a shape inside a sentence is also one that can take a
+     * very long time over a line that has none.
      */
     fun readLine(text: String): Pair<String, Shared>? {
+        if (text.length > MAX_LINE) return null
         val start = text.indexOf(START)
         if (start < 0) return null
-        val m = LINE.find(text.substring(start + START.length).trimEnd()) ?: return null
-        val g = m.groupValues
-        val type = Shape.Type.entries.firstOrNull { it.title.lowercase() == g[2] } ?: return null
-        val radius = g[3].toDoubleOrNull() ?: 0.0
-        val width = g[4].toDoubleOrNull() ?: 0.0
-        val length = g[5].toDoubleOrNull() ?: 0.0
-        if (type.sized == Shape.Sized.RADIUS && radius <= 0) return null
-        if (type.sized == Shape.Sized.WIDTH_LENGTH && (width <= 0 || length <= 0)) return null
-        val dimension = when (g[9]) {
-            "Overworld" -> "minecraft:overworld"
-            "Nether" -> "minecraft:the_nether"
-            "End" -> "minecraft:the_end"
-            else -> g[9].let { if (':' in it) it else "minecraft:$it" }
+        val said = text.substring(start + START.length).trimEnd()
+
+        // "<name>: <kind> ...": the kind is one of ours, and a name may hold anything, so the
+        // last place a kind follows a colon is where the shape begins.
+        var at = -1
+        var type: Shape.Type? = null
+        for ((word, kind) in KINDS) {
+            val found = said.lastIndexOf(": $word ")
+            if (found > at) {
+                at = found
+                type = kind
+            }
+        }
+        val kind = type ?: return null
+        val name = said.substring(0, at).trim()
+        var rest = said.substring(at + 2 + kind.title.length + 1)
+
+        // Everything after the first "·" describes the shape rather than places it.
+        val extrasAt = rest.indexOf(SEP)
+        val extras = if (extrasAt < 0) "" else rest.substring(extrasAt)
+        if (extrasAt >= 0) rest = rest.substring(0, extrasAt)
+
+        // "<size>[ from corner] at <x> <z> (<Dimension>)"
+        val atAt = rest.lastIndexOf(AT)
+        if (atAt < 0 || !rest.endsWith(")")) return null
+        val where = rest.substring(atAt + AT.length)
+        val openBracket = where.lastIndexOf(" (")
+        if (openBracket < 0) return null
+        val coordinates = where.substring(0, openBracket).split(' ')
+        if (coordinates.size != 2) return null
+        val x = coordinates[0].toIntOrNull() ?: return null
+        val z = coordinates[1].toIntOrNull() ?: return null
+        val dimension = Dimensions.id(where.substring(openBracket + 2, where.length - 1))
+
+        var sizeText = rest.substring(0, atAt)
+        val fromCorner = sizeText.endsWith(CORNER)
+        if (fromCorner) sizeText = sizeText.dropLast(CORNER.length)
+        var radius = 0.0
+        var width = 0.0
+        var length = 0.0
+        if (kind.sized == Shape.Sized.RADIUS) {
+            radius = sizeText.removePrefix("r").toDoubleOrNull() ?: return null
+            if (!sizeText.startsWith("r") || radius <= 0) return null
+        } else {
+            val sides = sizeText.split('x')
+            if (sides.size != 2) return null
+            width = sides[0].toDoubleOrNull() ?: return null
+            length = sides[1].toDoubleOrNull() ?: return null
+            if (width <= 0 || length <= 0) return null
         }
 
         var colour = Colours.RED.argb
@@ -116,7 +153,7 @@ object ShapeShare {
         var lineWidth = Config.DEFAULT_LINE_WIDTH
         var miniHudType: String? = null
         var y: Int? = null
-        for (part in g[10].split(SEP.trim()).map { it.trim() }.filter { it.isNotEmpty() }) {
+        for (part in extras.split(SEP.trim()).map { it.trim() }.filter { it.isNotEmpty() }) {
             when {
                 part == "filled" -> fill = true
                 part.endsWith("px") -> part.removeSuffix("px").toFloatOrNull()?.let {
@@ -133,24 +170,23 @@ object ShapeShare {
             }
         }
 
-        val name = g[1].trim()
         val shape = Shape(
-            label = if (name == type.title) "" else name,
+            label = if (name == kind.title) "" else name,
             dimension = dimension,
-            type = type,
-            x = g[7].toInt(),
-            z = g[8].toInt(),
+            type = kind,
+            x = x,
+            z = z,
             radius = radius,
             width = width,
             length = length,
-            anchor = if (g[6].isNotEmpty()) Shape.Anchor.CORNER else Shape.Anchor.CENTRE,
+            anchor = if (fromCorner) Shape.Anchor.CORNER else Shape.Anchor.CENTRE,
             colour = colour,
             fill = fill,
             lineWidth = lineWidth,
             y = y,
         )
         // What to show beside the button: the line up to its dimension, without the extras.
-        val shown = text.substring(0, text.length - g[10].length).trimEnd()
+        val shown = text.substring(0, text.length - extras.length).trimEnd()
         return shown to Shared(shape, miniHudType, y)
     }
 
@@ -238,30 +274,40 @@ object ShapeShare {
      * @return whether the original line should still be shown.
      */
     fun onChat(text: String): Boolean {
-        if (!Config.enabled || !Config.shareInChat) return true
+        // The message put in its place reads as a shared shape too, so without this it would be
+        // read, replaced, read again, and so on until the game gave up.
+        if (showing || !Config.enabled || !Config.shareInChat) return true
         val (said, shared) = readLine(text) ?: run {
             // A line from 1.2.0 or earlier, with the code on the end: shown without it.
             val old = codeIn(text)?.let(::decode) ?: return true
-            text.substringBefore(TAG).trim().removeSuffix("·").trim() to old
+            text.substringBefore(TAG).trim().removeSuffix("\u00b7").trim() to old
         }
         val shape = shared.shape
-        Minecraft.getInstance().gui.chatListener().handleSystemMessage(
-            Component.literal("$said  ").append(
-                Component.literal("[Add to my map]")
-                    .withStyle {
-                        it.withColor(shape.colour and 0xFFFFFF).withBold(true)
-                            .withClickEvent(ClickEvent.RunCommand("/$COMMAND ${encode(shared)}"))
-                            .withHoverEvent(HoverEvent.ShowText(Component.literal(
-                                "${shape.name}\n${shape.describeSize()}\n${shape.describePosition()}\n${dimensionName(shape.dimension)}" +
-                                    (if (shared.miniHudType != null && MiniHudShapes.installed) "\nMade in MiniHUD as well, if you want" else "") +
-                                    "\nClick to look at it before adding"
-                            )))
-                    }
-            ),
-            false,
-        )
+        showing = true
+        try {
+            Minecraft.getInstance().gui.chatListener().handleSystemMessage(
+                Component.literal("$said  ").append(
+                    Component.literal("[Add to my map]")
+                        .withStyle {
+                            it.withColor(shape.colour and 0xFFFFFF).withBold(true)
+                                .withClickEvent(ClickEvent.RunCommand("/$COMMAND ${encode(shared)}"))
+                                .withHoverEvent(HoverEvent.ShowText(Component.literal(
+                                    "${shape.name}\n${shape.describeSize()}\n${shape.describePosition()}\n${Dimensions.name(shape.dimension)}" +
+                                        (if (shared.miniHudType != null && MiniHudShapes.installed) "\nMade in MiniHUD as well, if you want" else "") +
+                                        "\nClick to look at it before adding"
+                                )))
+                        }
+                ),
+                false,
+            )
+        } finally {
+            showing = false
+        }
         return false
     }
+
+    /** Whether the message that replaces a shared line is being shown right now. */
+    private var showing = false
 
     /** Opens the shared shape in the add-a-shape screen, so it is looked at before it is kept. */
     fun accept(code: String) {
@@ -269,13 +315,6 @@ object ShapeShare {
         val shared = decode(code) ?: return MapMenus.say("That shape code could not be read.")
         if (!ShapeStore.isOpen) return MapMenus.say("Join a world first.")
         minecraft.gui.setScreen(com.skystormer.skysmapshapes.gui.ShapeEditScreen.forShared(minecraft.gui.screen(), shared))
-    }
-
-    fun dimensionName(dimension: String): String = when (dimension) {
-        "minecraft:overworld" -> "Overworld"
-        "minecraft:the_nether" -> "Nether"
-        "minecraft:the_end" -> "End"
-        else -> dimension.removePrefix("minecraft:")
     }
 
     /** The client-side command the add button runs. */
@@ -328,6 +367,9 @@ object ShapeShare {
 
     /** What a server will take in one line of chat, and in one command. */
     private const val MAX_CHAT = 256
+
+    /** Beyond this a line cannot be one of ours, whatever it holds. */
+    private const val MAX_LINE = 512
     private const val MAX_COMMAND = 256
 
     /** Ticks between private messages: half a second, which no server counts as spam. */
