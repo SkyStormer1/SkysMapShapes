@@ -92,7 +92,11 @@ object MapMenus {
         })
         options.add(option("Share in chat…", options.size, target) { parent -> confirmShare(parent, shape) })
         if (MiniHudShapes.installed && Config.showMiniHud) {
-            options.add(option("Move into MiniHUD…", options.size, target) { parent -> confirmMoveToMiniHud(parent, shape) })
+            val why = whyNotMoveToMiniHud(shape)
+            val label = if (why == null) "Move into MiniHUD…"
+                else "Move into MiniHUD: go to the ${ShapeShare.dimensionName(shape.dimension)}"
+            options.add(option(label, options.size, target) { parent -> confirmMoveToMiniHud(parent, shape) }
+                .setActive(why == null))
         }
         options.add(option("Delete…", options.size, target) { parent -> confirmDelete(parent, shape) })
     }
@@ -112,8 +116,16 @@ object MapMenus {
      */
     fun confirmMoveToMiniHud(parent: Screen?, shape: Shape) {
         val player = Minecraft.getInstance().player
-        if (player == null || player.level().dimension().identifier().toString() != shape.dimension) {
-            say("Go to the ${ShapeShare.dimensionName(shape.dimension)} first: MiniHUD only holds shapes for the dimension you are in.")
+        val why = whyNotMoveToMiniHud(shape)
+        if (player == null || why != null) {
+            // Said on a screen of its own: the action bar is hidden while a screen is open.
+            open(ConfirmScreen(
+                { _ -> open(parent) },
+                Component.literal("${shape.name} cannot move into MiniHUD yet"),
+                Component.literal(why ?: "Join a world first."),
+                CommonComponents.GUI_BACK,
+                CommonComponents.GUI_BACK,
+            ))
             return
         }
         if (ShapeStore.byId(shape.id) == null) {
@@ -156,6 +168,23 @@ object MapMenus {
             Component.literal("Delete ${ShapeLabels.nameOf(shape)}?"),
             Component.literal("${shape.describeSize()}, ${shape.describePosition().replaceFirstChar { it.lowercase() }}. This cannot be undone."),
         ))
+    }
+
+    /** The dimension you are standing in, which is the only one MiniHUD holds shapes for. */
+    fun playerDimension(): String? =
+        Minecraft.getInstance().player?.level()?.dimension()?.identifier()?.toString()
+
+    /** Whether [shape] can be moved into MiniHUD from where you are. */
+    fun canMoveToMiniHud(shape: Shape): Boolean =
+        MiniHudShapes.installed && Config.showMiniHud && playerDimension() == shape.dimension
+
+    /** Why a shape cannot be moved into MiniHUD, for a tooltip; null when it can. */
+    fun whyNotMoveToMiniHud(shape: Shape): String? = when {
+        !MiniHudShapes.installed -> "MiniHUD is not installed."
+        !Config.showMiniHud -> "MiniHUD shapes are switched off in the settings."
+        playerDimension() != shape.dimension ->
+            "Go to the ${ShapeShare.dimensionName(shape.dimension)} first: MiniHUD only holds shapes for the dimension you are in."
+        else -> null
     }
 
     /** The dimension Xaero's world map is showing. */

@@ -219,12 +219,19 @@ class ShapeEditScreen private constructor(
                     .build()
             )
             if (toMiniHud) {
+                // Greyed out from another dimension: MiniHUD only holds the one you are in.
+                val why = MapMenus.whyNotMoveToMiniHud(existing)
                 addRenderableWidget(
                     // Back to the map or list, not here: the shape is gone from this mod once moved.
                     Button.builder(Component.literal("Move into MiniHUD…")) { MapMenus.confirmMoveToMiniHud(parent, existing) }
                         .bounds(left + shareWidth + GAP, y, WIDTH - shareWidth - GAP, ROW)
-                        .tooltip(Tooltip.create(Component.literal("Turn this into a MiniHUD shape, shown in the world as well as on the map instead.")))
+                        .tooltip(Tooltip.create(Component.literal(
+                            "Turn this into a MiniHUD shape, shown in the world as well as on the map instead of here. " +
+                                "It is put at your height, and can be changed afterwards in MiniHUD's editor." +
+                                if (why != null) "\n\n" + why else ""
+                        )))
                         .build()
+                        .also { it.active = why == null }
                 )
             }
             y += ROW + GAP
