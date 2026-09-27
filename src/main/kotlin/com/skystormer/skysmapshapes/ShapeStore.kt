@@ -25,6 +25,13 @@ object ShapeStore {
     var worldName: String? = null
         private set
 
+    /**
+     * The world as a file name: the server address with anything awkward replaced, which is how
+     * MiniHUD names its files too. Null when not in a world.
+     */
+    var worldKey: String? = null
+        private set
+
     /** Read by the render thread every frame, so replaced whole rather than changed in place. */
     @Volatile
     var all: List<Shape> = emptyList()
@@ -45,6 +52,7 @@ object ShapeStore {
         }
         val (name, key) = world
         worldName = name
+        worldKey = key
         file = FabricLoader.getInstance().configDir.resolve("skysmapshapes").resolve("$key.json")
         all = read(file!!)
         hiddenMiniHud = readHidden(file!!)
@@ -68,6 +76,7 @@ object ShapeStore {
     fun close() {
         file = null
         worldName = null
+        worldKey = null
         all = emptyList()
         hiddenMiniHud = emptySet()
     }

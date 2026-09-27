@@ -107,29 +107,60 @@ object MiniHudShapes {
         all = emptyList()
         fileCache.clear()
         ticks = 0
+        reportedPrefix = null
     }
 
     /**
-     * The shapes MiniHUD saved for this server's other dimensions. Its file for the dimension you
-     * are in is named `<server>_dim_<namespace>_<path>.json`; the others share the first part.
+     * The shapes MiniHUD saved for this server's other dimensions, so the world map shows them
+     * whichever dimension it is switched to. MiniHUD keeps one file per dimension, named
+     * `<server>_dim_<namespace>_<path>.json`, and only holds the one you are in.
      */
     private fun otherDimensions(api: Api, here: String): List<MiniHudShape> {
-        val current = api.storageName.invoke(null, true, "", ".json", "minihud_default") as? String ?: return emptyList()
-        val suffix = "_dim_" + here.replace(':', '_') + ".json"
-        if (!current.endsWith(suffix)) return emptyList()
-        val prefix = current.removeSuffix(suffix) + "_dim_"
         val folder = FabricLoader.getInstance().configDir.resolve("minihud")
         if (!Files.isDirectory(folder)) return emptyList()
+        val prefix = filePrefix(api) ?: return emptyList()
+        val hereName = prefix + here.replace(':', '_') + ".json"
         val result = ArrayList<MiniHudShape>()
-        Files.list(folder).use { files ->
-            for (file in files) {
+        var files = 0
+        Files.list(folder).use { paths ->
+            for (file in paths) {
                 val name = file.fileName.toString()
-                if (!name.startsWith(prefix) || !name.endsWith(".json") || name == current) continue
-                val dimension = dimensionFromFile(name.removePrefix(prefix).removeSuffix(".json"))
-                result += readFile(file, dimension)
+                // The dimension you are in comes from MiniHUD itself, live, so its file is skipped.
+                if (!name.startsWith(prefix) || !name.endsWith(".json") || name == hereName) continue
+                files++
+                result += readFile(file, dimensionFromFile(name.removePrefix(prefix).removeSuffix(".json")))
             }
         }
+        if (reportedPrefix != prefix) {
+            reportedPrefix = prefix
+            Log.info("MiniHUD shapes for other dimensions: {} file(s) beginning {}, {} shape(s)", files, prefix, result.size)
+        }
         return result
+    }
+
+    /** The prefix already reported to the log, so it is said once per world rather than twice a second. */
+    private var reportedPrefix: String? = null
+
+    /**
+     * What MiniHUD's files for this world are called, up to and including `_dim_`: asked of MaLiLib,
+     * which names them, and worked out from the server address if that ever stops answering.
+     */
+    private fun filePrefix(api: Api): String? {
+        // MaLiLib's flag asks for the world's *global* name; false gives the one per dimension,
+        // `<server>_dim_<namespace>_<path>.json`, which is how the shape files are named.
+        val named = try {
+            api.storageName.invoke(null, false, "", ".json", "minihud_default") as? String
+        } catch (e: Throwable) {
+            Log.warn("Could not ask MiniHUD what its files are called: {}", e.toString())
+            null
+        }
+        if (named != null) {
+            // Normally `<server>_dim_<dimension>.json`; a MiniHUD that stops adding the dimension
+            // would give `<server>.json`, and the files beside it still carry it.
+            val base = if ("_dim_" in named) named.substringBefore("_dim_") else named.removeSuffix(".json")
+            if (base.isNotEmpty()) return base + "_dim_"
+        }
+        return ShapeStore.worldKey?.let { it + "_dim_" }
     }
 
     /** `minecraft_the_nether` back to `minecraft:the_nether`. */
