@@ -1,5 +1,7 @@
 package com.skystormer.skysmapshapes
 
+import com.skystormer.skysmapshapes.gui.AddShapeWindow
+
 import com.mojang.blaze3d.vertex.PoseStack
 import net.minecraft.resources.ResourceKey
 import net.minecraft.world.level.Level
@@ -35,9 +37,12 @@ object ShapeDrawing {
         }
         if (!Config.enabled || !Config.showOnWorldMap) return ShapeHover.clear()
         try {
-            val shapes = shapesFor(mapProcessor) ?: return ShapeHover.clear()
             val blocksPerUnit = blocksPerUnit(matrix)
-            if (updateHover) ShapeHover.update(shapes, mouseX, mouseZ, blocksPerUnit)
+            AddShapeWindow.mouseOnMap(mouseX, mouseZ, blocksPerUnit)
+            val shapes = shapesFor(mapProcessor) ?: return ShapeHover.clear()
+            // While a shape is being made, the mouse is for it, not for hovering the others.
+            if (AddShapeWindow.active) ShapeHover.clear()
+            else if (updateHover) ShapeHover.update(shapes, mouseX, mouseZ, blocksPerUnit)
             // How much of the world is on screen. Xaero's units are at most window pixels, so
             // measuring with the window's size never sees too little.
             val window = Minecraft.getInstance().window
@@ -46,6 +51,8 @@ object ShapeDrawing {
             val view = Geometry.Bounds(cameraX - halfWidth, cameraZ - halfHeight, cameraX + halfWidth, cameraZ + halfHeight)
             val buffer = XaeroLib.INSTANCE.client.bufferProvider.getBuffer(CustomRenderTypes.MAP_COLOR_OVERLAY)
             draw(buffer, matrix, shapes, originX, originZ, blocksPerUnit, view)
+            handles(buffer, matrix, originX, originZ)
+            if (AddShapeWindow.active) AddShapeWindow.mapView(cameraX, cameraZ)
         } catch (e: Throwable) {
             failOnce("world map", e)
         }
@@ -204,6 +211,51 @@ object ShapeDrawing {
             buffer.addVertex(matrix, bx - nx, bz - nz, 0f).setColor(red, green, blue, 1f)
             buffer.addVertex(matrix, ax - nx, az - nz, 0f).setColor(red, green, blue, 1f)
         }
+    }
+
+    /** The draft's handles: white squares edged in black, the same size on screen at any zoom. */
+    private fun handles(buffer: VertexConsumer, matrix: Matrix4f, originX: Int, originZ: Int) {
+        // The measuring lines first, white on a black edge, so the handles sit on top of them.
+        val lines = AddShapeWindow.measureLines()
+        val half = AddShapeWindow.lineWidth()
+        for (shade in floatArrayOf(0f, 1f)) {
+            val w = if (shade == 0f) half * 2 else half
+            for (l in lines) segment(buffer, matrix, l[0] - originX, l[1] - originZ, l[2] - originX, l[3] - originZ, w, shade)
+        }
+        val points = AddShapeWindow.handles().takeIf { it.isNotEmpty() } ?: return
+        val size = AddShapeWindow.handleSize()
+        for (p in points) {
+            square(buffer, matrix, p[0] - originX, p[1] - originZ, size, 0f)
+            square(buffer, matrix, p[0] - originX, p[1] - originZ, size * 0.6, 1f)
+        }
+    }
+
+    /** A straight line [half] wide each side, as one quad. */
+    private fun segment(buffer: VertexConsumer, matrix: Matrix4f, x1: Double, z1: Double, x2: Double, z2: Double, half: Double, shade: Float) {
+        val len = Math.hypot(x2 - x1, z2 - z1)
+        if (len <= 0) return
+        // Lengthened by its width at both ends, so the ticks join it without a gap.
+        val ux = (x2 - x1) / len * half
+        val uz = (z2 - z1) / len * half
+        val nx = -uz
+        val nz = ux
+        val ax = x1 - ux; val az = z1 - uz
+        val bx = x2 + ux; val bz = z2 + uz
+        buffer.addVertex(matrix, (ax + nx).toFloat(), (az + nz).toFloat(), 0f).setColor(shade, shade, shade, 1f)
+        buffer.addVertex(matrix, (ax - nx).toFloat(), (az - nz).toFloat(), 0f).setColor(shade, shade, shade, 1f)
+        buffer.addVertex(matrix, (bx - nx).toFloat(), (bz - nz).toFloat(), 0f).setColor(shade, shade, shade, 1f)
+        buffer.addVertex(matrix, (bx + nx).toFloat(), (bz + nz).toFloat(), 0f).setColor(shade, shade, shade, 1f)
+    }
+
+    private fun square(buffer: VertexConsumer, matrix: Matrix4f, x: Double, z: Double, half: Double, shade: Float) {
+        val x0 = (x - half).toFloat()
+        val x1 = (x + half).toFloat()
+        val z0 = (z - half).toFloat()
+        val z1 = (z + half).toFloat()
+        buffer.addVertex(matrix, x0, z0, 0f).setColor(shade, shade, shade, 1f)
+        buffer.addVertex(matrix, x0, z1, 0f).setColor(shade, shade, shade, 1f)
+        buffer.addVertex(matrix, x1, z1, 0f).setColor(shade, shade, shade, 1f)
+        buffer.addVertex(matrix, x1, z0, 0f).setColor(shade, shade, shade, 1f)
     }
 
     private val failed = HashSet<String>()

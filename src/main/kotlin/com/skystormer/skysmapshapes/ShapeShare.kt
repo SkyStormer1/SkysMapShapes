@@ -185,6 +185,7 @@ object ShapeShare {
             lineWidth = lineWidth,
             y = y,
         )
+        if (!shape.isValid()) return null
         // What to show beside the button: the line up to its dimension, without the extras.
         val shown = text.substring(0, text.length - extras.length).trimEnd()
         return shown to Shared(shape, miniHudType, y)
@@ -217,6 +218,7 @@ object ShapeShare {
 
     /** A shared shape from a code, or null if it is not one of ours or is damaged. */
     fun decode(code: String): Shared? = try {
+        if (code.length > MAX_LINE) throw IllegalArgumentException("too long")
         val json = JsonParser.parseString(String(decoder.decode(code.trim()), Charsets.UTF_8)).asJsonObject
         val type = Shape.Type.valueOf(json.get("t").asString.uppercase())
         val y = json.get("y")?.asInt
@@ -238,7 +240,7 @@ object ShapeShare {
                 lineWidth = json.get("n")?.asFloat?.coerceIn(Config.MIN_LINE_WIDTH, Config.MAX_LINE_WIDTH) ?: Config.DEFAULT_LINE_WIDTH,
                 y = y,
             ),
-        )
+        ).takeIf { it.shape.isValid() }
     } catch (e: Exception) {
         null
     }

@@ -104,7 +104,30 @@ data class Shape(
     override fun describePosition(): String =
         if (type == Type.RECTANGLE && anchor == Anchor.CORNER) "North-west corner at $x, $z" else "Centred on $x, $z"
 
+    /**
+     * Whether every value is one a shape can really have. Shapes arrive from chat and from files
+     * as well as from this mod's own screens, so each is checked before it is kept: a size that
+     * is not a number, or far bigger than any world, or a dimension that is not an id, is turned
+     * away rather than drawn or written anywhere.
+     */
+    fun isValid(): Boolean {
+        fun size(value: Double) = value.isFinite() && value > 0 && value <= MAX_SIZE
+        val sized = when (type.sized) {
+            Sized.RADIUS -> size(radius)
+            Sized.WIDTH_LENGTH -> size(width) && size(length)
+        }
+        return sized && Math.abs(x) <= MAX_COORDINATE && Math.abs(z) <= MAX_COORDINATE &&
+            (y == null || y in -MAX_HEIGHT..MAX_HEIGHT) && label.length <= MAX_LABEL &&
+            lineWidth.isFinite() && Dimensions.isId(dimension)
+    }
+
     companion object {
+        /** Well past the world border, in blocks; nothing real is bigger or further out. */
+        const val MAX_SIZE = 60_000_000.0
+        const val MAX_COORDINATE = 30_000_000
+        const val MAX_HEIGHT = 2048
+        const val MAX_LABEL = 128
+
         /**
          * A number as plain text: no ".0" on whole ones, a dot for decimals whatever the
          * language, since these are read by people and by other copies of this mod.

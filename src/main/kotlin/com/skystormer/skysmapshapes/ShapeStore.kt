@@ -37,9 +37,21 @@ object ShapeStore {
     var all: List<Shape> = emptyList()
         private set
 
-    /** Ids of MiniHUD shapes hidden on the map. MiniHUD itself is never changed. */
+    /** Ids of MiniHUD shapes hidden on the map, whether or not they are on in MiniHUD. */
     @Volatile
     var hiddenMiniHud: Set<String> = emptySet()
+        private set
+
+    /** Ids of MiniHUD shapes shown on the map although they are switched off in MiniHUD. */
+    @Volatile
+    var shownMiniHud: Set<String> = emptySet()
+        private set
+
+    /**
+     * What Hide all hid, so Show all brings back only those: each shape's id, with "map" when it
+     * was hidden on the map and "minihud" when it was switched off in MiniHUD (or both).
+     */
+    var hiddenByHideAll: Map<String, Set<String>> = emptyMap()
         private set
 
     val isOpen: Boolean get() = file != null
@@ -55,7 +67,7 @@ object ShapeStore {
         worldKey = key
         file = FabricLoader.getInstance().configDir.resolve("skysmapshapes").resolve("$key.json")
         all = read(file!!)
-        hiddenMiniHud = readHidden(file!!)
+        readNotes(file!!)
         Log.info("Loaded {} shape(s) for {} from {}", all.size, name, file)
     }
 
@@ -65,10 +77,15 @@ object ShapeStore {
      * behind; without this they would pile up in the file forever.
      */
     fun pruneHidden(known: Set<String>) {
-        if (hiddenMiniHud.isEmpty() || known.isEmpty()) return
-        val kept = hiddenMiniHud.intersect(known)
-        if (kept.size != hiddenMiniHud.size) {
-            hiddenMiniHud = kept
+        if (known.isEmpty()) return
+        val hidden = hiddenMiniHud.intersect(known)
+        val shown = shownMiniHud.intersect(known)
+        // Hide all's notes on this mod's own shapes are pruned as those shapes are deleted.
+        val remembered = hiddenByHideAll.filterKeys { !it.startsWith(MINIHUD_ID) || it in known }
+        if (hidden.size != hiddenMiniHud.size || shown.size != shownMiniHud.size || remembered.size != hiddenByHideAll.size) {
+            hiddenMiniHud = hidden
+            shownMiniHud = shown
+            hiddenByHideAll = remembered
             save()
         }
     }
@@ -79,32 +96,119 @@ object ShapeStore {
         worldKey = null
         all = emptyList()
         hiddenMiniHud = emptySet()
+        shownMiniHud = emptySet()
+        hiddenByHideAll = emptyMap()
     }
 
-    /** Shows or hides [shape] on the map: for one of ours, its own setting; for MiniHUD's, a note kept here. */
+    /**
+     * Whether a MiniHUD shape is drawn on the map: as it was last shown or hidden here, or else
+     * as it is in MiniHUD (shapes switched off there only drawn when the settings ask).
+     */
+    fun miniHudOnMap(id: String, enabledInMiniHud: Boolean): Boolean = when (id) {
+        in hiddenMiniHud -> false
+        in shownMiniHud -> true
+        else -> enabledInMiniHud || Config.miniHudIncludeDisabled
+    }
+
+    /**
+     * Shows or hides [shape] on the map only. One of MiniHUD's is left as it is in MiniHUD, so
+     * it stays in (or out of) the world.
+     */
     fun setVisible(shape: MapShape, visible: Boolean) {
         when (shape) {
             is Shape -> byId(shape.id)?.let { put(it.copy(visible = visible)) }
-            // Hiding one of MiniHUD's normally switches it off in MiniHUD too, so it goes from the
-            // world as well; if that is off, or it is in another dimension, it is hidden here only.
             is MiniHudShape -> {
-                val inMiniHud = Config.hideInMiniHud && MiniHudShapes.setEnabled(shape, visible)
-                if (inMiniHud) {
-                    if (visible) hiddenMiniHud = hiddenMiniHud - shape.id
-                } else {
-                    hiddenMiniHud = if (visible) hiddenMiniHud - shape.id else hiddenMiniHud + shape.id
-                }
+                noteOnMap(shape.id, visible, shape.enabledInMiniHud)
                 save()
             }
             else -> {}
         }
     }
 
-    /** Hides a MiniHUD shape on the map only, leaving MiniHUD alone. */
-    fun hideOnMapOnly(shape: MapShape) {
-        hiddenMiniHud = hiddenMiniHud + shape.id
+    /** Remembers whether a MiniHUD shape is on the map, noting only what differs from MiniHUD. */
+    private fun noteOnMap(id: String, visible: Boolean, enabledInMiniHud: Boolean) {
+        hiddenMiniHud = hiddenMiniHud - id
+        shownMiniHud = shownMiniHud - id
+        if (visible == miniHudOnMap(id, enabledInMiniHud)) return
+        if (visible) shownMiniHud = shownMiniHud + id else hiddenMiniHud = hiddenMiniHud + id
+    }
+
+    /**
+     * Switches [shape] on or off in MiniHUD, so it comes into or goes from the world, leaving it
+     * on the map or off it as it was. Says whether MiniHUD took the change.
+     */
+    fun setInMiniHud(shape: MiniHudShape, on: Boolean): Boolean {
+        val onMap = shape.visible
+        // Switching on a shape MiniHUD cannot draw would crash the game, however it was made.
+        if (on) shape.asOwnShape()?.let { MiniHudGeometry.whyTooBig(it, MiniHudGeometry.formOfType(shape.typeId)) }?.let { why ->
+            Log.info("Left {} off in MiniHUD: {}", shape.name, why)
+            MapMenus.say(why.substringBefore(" It stays") + " It stays off in MiniHUD.")
+            return false
+        }
+        if (!MiniHudShapes.setEnabled(shape, on)) return false
+        noteOnMap(shape.id, onMap, on)
+        save()
+        return true
+    }
+
+    /** Takes a deleted MiniHUD shape's notes away with it. */
+    fun forgetMiniHud(id: String) {
+        hiddenMiniHud = hiddenMiniHud - id
+        shownMiniHud = shownMiniHud - id
+        hiddenByHideAll = hiddenByHideAll - id
         save()
     }
+
+    /**
+     * Hides every one of [shapes] that is showing, and remembers which, so [showAll] brings back
+     * only those. With [inMiniHudToo], MiniHUD's shapes are switched off in MiniHUD as well.
+     */
+    fun hideAll(shapes: List<MapShape>, inMiniHudToo: Boolean) {
+        val remembered = hiddenByHideAll.toMutableMap()
+        for (shape in shapes) {
+            val did = HashSet<String>()
+            if (shape is MiniHudShape && inMiniHudToo && shape.enabledInMiniHud && shape.changeable &&
+                setInMiniHud(shape, false)) did += IN_MINIHUD
+            // Read again: switching it off in MiniHUD gave it a new state.
+            val now = if (shape is MiniHudShape) MiniHudShapes.all.firstOrNull { it.id == shape.id } ?: shape else shape
+            if (now.visible) {
+                setVisible(now, false)
+                did += ON_MAP
+            }
+            if (did.isNotEmpty()) remembered[shape.id] = remembered[shape.id].orEmpty() + did
+        }
+        hiddenByHideAll = remembered
+        save()
+    }
+
+    /**
+     * Brings back what [hideAll] hid among [shapes], and only that. When it hid none of them,
+     * shows every one of them on the map instead (and in MiniHUD with [inMiniHudToo]).
+     * Says how many it brought back.
+     */
+    fun showAll(shapes: List<MapShape>, inMiniHudToo: Boolean): Int {
+        val remembered = shapes.filter { it.id in hiddenByHideAll }
+        if (remembered.isEmpty()) {
+            for (shape in shapes) {
+                if (shape is MiniHudShape && inMiniHudToo && !shape.enabledInMiniHud && shape.changeable) setInMiniHud(shape, true)
+                val now = if (shape is MiniHudShape) MiniHudShapes.all.firstOrNull { it.id == shape.id } ?: shape else shape
+                if (!now.visible) setVisible(now, true)
+            }
+            return shapes.size
+        }
+        for (shape in remembered) {
+            val did = hiddenByHideAll[shape.id].orEmpty()
+            if (shape is MiniHudShape && IN_MINIHUD in did) setInMiniHud(shape, true)
+            val now = if (shape is MiniHudShape) MiniHudShapes.all.firstOrNull { it.id == shape.id } ?: shape else shape
+            if (ON_MAP in did) setVisible(now, true)
+        }
+        hiddenByHideAll = hiddenByHideAll - remembered.map { it.id }.toSet()
+        save()
+        return remembered.size
+    }
+
+    /** How many of [shapes] Hide all hid and Show all would bring back. */
+    fun hiddenByHideAll(shapes: List<MapShape>): Int = shapes.count { it.id in hiddenByHideAll }
 
     /**
      * The shapes in [dimension], largest first: everything is drawn in this order, so a smaller
@@ -123,6 +227,7 @@ object ShapeStore {
 
     fun remove(id: String) {
         all = all.filter { it.id != id }
+        hiddenByHideAll = hiddenByHideAll - id
         save()
     }
 
@@ -140,6 +245,10 @@ object ShapeStore {
         return folder to "singleplayer-${safe(folder)}"
     }
 
+    private const val MINIHUD_ID = "minihud:"
+    private const val ON_MAP = "map"
+    private const val IN_MINIHUD = "minihud"
+
     private fun safe(text: String): String = text.replace(Regex("[^A-Za-z0-9._-]"), "_").ifEmpty { "_" }
 
     private fun read(path: Path): List<Shape> {
@@ -148,7 +257,7 @@ object ShapeStore {
             val json = Files.newBufferedReader(path).use { JsonParser.parseReader(it) }.asJsonObject
             json.getAsJsonArray("shapes")?.mapNotNull { element ->
                 try {
-                    fromJson(element.asJsonObject)
+                    fromJson(element.asJsonObject).also { require(it.isValid()) { "a size, place or dimension no shape can have" } }
                 } catch (e: Exception) {
                     Log.warn("Skipping a shape in {} that could not be read: {}", path, e.toString())
                     null
@@ -160,12 +269,21 @@ object ShapeStore {
         }
     }
 
-    private fun readHidden(path: Path): Set<String> = try {
-        if (!Files.exists(path)) emptySet()
-        else Files.newBufferedReader(path).use { JsonParser.parseReader(it) }.asJsonObject
-            .getAsJsonArray("hiddenMiniHud")?.map { it.asString }?.toSet() ?: emptySet()
-    } catch (e: Exception) {
-        emptySet()
+    /** The notes kept beside the shapes: which MiniHUD shapes are shown or hidden, and what Hide all hid. */
+    private fun readNotes(path: Path) {
+        hiddenMiniHud = emptySet()
+        shownMiniHud = emptySet()
+        hiddenByHideAll = emptyMap()
+        try {
+            if (!Files.exists(path)) return
+            val json = Files.newBufferedReader(path).use { JsonParser.parseReader(it) }.asJsonObject
+            hiddenMiniHud = json.getAsJsonArray("hiddenMiniHud")?.map { it.asString }?.toSet() ?: emptySet()
+            shownMiniHud = json.getAsJsonArray("shownMiniHud")?.map { it.asString }?.toSet() ?: emptySet()
+            hiddenByHideAll = json.getAsJsonObject("hiddenByHideAll")?.entrySet()
+                ?.associate { (id, did) -> id to did.asJsonArray.map { it.asString }.toSet() } ?: emptyMap()
+        } catch (e: Exception) {
+            Log.warn("Could not read the shown and hidden notes in {}: {}", path, e.toString())
+        }
     }
 
     private fun save() {
@@ -177,8 +295,11 @@ object ShapeStore {
             json.addProperty("version", 1)
             json.add("shapes", array)
             if (hiddenMiniHud.isNotEmpty()) json.add("hiddenMiniHud", JsonArray().also { a -> hiddenMiniHud.sorted().forEach(a::add) })
-            Files.createDirectories(path.parent)
-            Files.writeString(path, GSON.toJson(json))
+            if (shownMiniHud.isNotEmpty()) json.add("shownMiniHud", JsonArray().also { a -> shownMiniHud.sorted().forEach(a::add) })
+            if (hiddenByHideAll.isNotEmpty()) json.add("hiddenByHideAll", JsonObject().also { o ->
+                hiddenByHideAll.toSortedMap().forEach { (id, did) -> o.add(id, JsonArray().also { a -> did.sorted().forEach(a::add) }) }
+            })
+            SafeFiles.writeString(path, GSON.toJson(json))
         } catch (e: Exception) {
             Log.error("Could not save $path", e)
         }

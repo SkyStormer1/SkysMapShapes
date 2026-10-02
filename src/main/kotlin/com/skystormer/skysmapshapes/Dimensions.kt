@@ -31,6 +31,15 @@ object Dimensions {
         else -> if (':' in name) name else "minecraft:$name"
     }
 
+    private val ID = Regex("[a-z0-9_.-]{1,64}:[a-z0-9_.-]{1,128}")
+
+    /**
+     * Whether [id] is a dimension id that is safe everywhere this mod uses one, including in
+     * MiniHUD's file names: Minecraft's own characters, without the `/` its ids also allow, and
+     * never `..`.
+     */
+    fun isId(id: String): Boolean = ID.matches(id) && ".." !in id
+
     /** The dimension you are standing in, which is the only one MiniHUD holds shapes for. */
     fun ofPlayer(): String? =
         Minecraft.getInstance().player?.level()?.dimension()?.identifier()?.toString()

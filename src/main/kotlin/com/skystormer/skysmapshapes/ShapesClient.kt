@@ -2,6 +2,8 @@ package com.skystormer.skysmapshapes
 
 import com.mojang.blaze3d.platform.InputConstants
 import com.skystormer.skysmapshapes.gui.ShapeListScreen
+import com.skystormer.skysmapshapes.gui.ShapesPanel
+import com.skystormer.skysmapshapes.gui.AddShapeWindow
 import com.mojang.brigadier.arguments.StringArgumentType
 import net.fabricmc.api.ClientModInitializer
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
@@ -11,13 +13,9 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
-import net.fabricmc.fabric.api.client.screen.v1.Screens
 import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.SharedConstants
 import net.minecraft.client.KeyMapping
-import net.minecraft.client.gui.components.Button
-import net.minecraft.client.gui.components.Tooltip
-import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
 
 object ShapesClient : ClientModInitializer {
@@ -68,15 +66,16 @@ object ShapesClient : ClientModInitializer {
             }
         }
 
-        // A Shapes button on Xaero's world map, under its settings button in the top-left corner.
+        // The Shapes panel on Xaero's world map, which docks with Sky's Map Exposer's bar and Sky's
+        // Structure Map's legend.
         ScreenEvents.AFTER_INIT.register { _, screen, _, _ ->
             if (Config.enabled && screen.javaClass.name == "xaero.map.gui.GuiMap") {
-                Screens.getWidgets(screen).add(
-                    Button.builder(Component.literal("Shapes")) { Screens.getMinecraft(screen).gui.setScreen(ShapeListScreen(screen)) }
-                        .bounds(0, 32, 44, 20)
-                        .tooltip(Tooltip.create(Component.literal("All your shapes: show, hide, find, edit or delete them.")))
-                        .build()
-                )
+                try {
+                    ShapesPanel.addTo(screen)
+                    AddShapeWindow.install(screen)
+                } catch (e: Throwable) {
+                    Log.error("Could not add the Shapes panel to Xaero's world map", e)
+                }
             }
         }
 

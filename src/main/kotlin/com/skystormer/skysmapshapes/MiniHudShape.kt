@@ -14,13 +14,18 @@ class MiniHudShape(
     val centreY: Int? = null,
     /** MiniHUD's own shape object, for shapes in the dimension you are in; null for ones read from a file. */
     val handle: Any? = null,
+    /** MiniHUD's file it was read from, for shapes in other dimensions; null for live ones. */
+    val file: java.nio.file.Path? = null,
 ) : MapShape {
-    /** Whether MiniHUD's editor can be opened on it from here. */
+    /** Whether MiniHUD's editor can be opened on it from here: only in the dimension you are in. */
     val editable: Boolean get() = handle != null
+
+    /** Whether it can be switched on or off, or deleted, in MiniHUD from here: any dimension. */
+    val changeable: Boolean get() = handle != null || file != null
 
     override val fill: Boolean get() = false
     override val visible: Boolean
-        get() = (enabledInMiniHud || Config.miniHudIncludeDisabled) && id !in ShapeStore.hiddenMiniHud
+        get() = ShapeStore.miniHudOnMap(id, enabledInMiniHud)
     override val effectiveLineWidth: Float get() = Config.DEFAULT_LINE_WIDTH * Config.thicknessScale
     override val fromMiniHud: Boolean get() = true
     override val name: String get() = label.ifBlank { typeTitle }

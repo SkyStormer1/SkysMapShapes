@@ -79,14 +79,16 @@ object ShapeHover {
                 for (shape in shapes) {
                     val name = shape.name
                     if (shape is Shape) {
-                        options.add(MapMenus.option("Edit: $name", options.size, this) { parent ->
-                            ShapeStore.byId(shape.id)?.let { MapMenus.open(com.skystormer.skysmapshapes.gui.ShapeEditScreen.forExisting(parent, it)) }
-                        })
+                        options.add(MapMenus.option("Edit: $name", options.size, this) { parent -> MapMenus.edit(parent, shape) })
                         options.add(MapMenus.option("Delete: $name", options.size, this) { parent -> MapMenus.confirmDelete(parent, shape) })
                     } else if (shape is MiniHudShape) {
                         options.add(MapMenus.option("Edit in MiniHUD: $name", options.size, this) { parent -> MiniHudShapes.openEditor(shape, parent) }
                             .setActive(shape.editable))
-                        options.add(MapMenus.option("Hide MiniHUD's $name", options.size, this) { _ -> ShapeStore.setVisible(shape, false) })
+                        options.add(MapMenus.option("Show or hide: $name…", options.size, this) { parent ->
+                            MapMenus.open(com.skystormer.skysmapshapes.gui.MiniHudVisibilityScreen(parent, shape))
+                        })
+                        options.add(MapMenus.option("Delete: $name", options.size, this) { parent -> MapMenus.confirmDelete(parent, shape) }
+                            .setActive(shape.changeable))
                     }
                 }
             }

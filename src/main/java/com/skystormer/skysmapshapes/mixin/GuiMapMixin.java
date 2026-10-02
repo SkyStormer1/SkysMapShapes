@@ -6,8 +6,10 @@ import com.skystormer.skysmapshapes.MapMenus;
 import com.skystormer.skysmapshapes.MenuTips;
 import com.skystormer.skysmapshapes.ShapeDrawing;
 import com.skystormer.skysmapshapes.ShapeHover;
+import com.skystormer.skysmapshapes.gui.AddShapeWindow;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 import org.joml.Matrix4f;
@@ -120,6 +122,12 @@ public abstract class GuiMapMixin implements MapCamera {
     private IRightClickableElement skysmapshapes$rightClickShape(IRightClickableElement target) {
         IRightClickableElement shapes = ShapeHover.rightClickTarget();
         return shapes != null ? shapes : target;
+    }
+
+    /** Letters typed while a box in the add shape window has the keyboard go to it, not to Xaero. */
+    @Inject(method = "charTyped", at = @At("HEAD"), cancellable = true, require = 0)
+    private void skysmapshapes$typeIntoWindow(CharacterEvent event, CallbackInfoReturnable<Boolean> cir) {
+        if (AddShapeWindow.charTyped(event)) cir.setReturnValue(true);
     }
 
     @Inject(method = "getRightClickOptions", at = @At("RETURN"), require = 0)

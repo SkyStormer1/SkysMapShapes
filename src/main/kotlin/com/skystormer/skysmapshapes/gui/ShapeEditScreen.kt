@@ -4,6 +4,7 @@ import com.skystormer.skysmapshapes.Colours
 import com.skystormer.skysmapshapes.Config
 import com.skystormer.skysmapshapes.Dimensions
 import com.skystormer.skysmapshapes.MapMenus
+import com.skystormer.skysmapshapes.MiniHudGeometry
 import com.skystormer.skysmapshapes.MiniHudShapes
 import com.skystormer.skysmapshapes.Shape
 import com.skystormer.skysmapshapes.ShapeShare
@@ -23,7 +24,7 @@ import kotlin.math.floor
 /**
  * Adding or editing one shape: its label, kind, colour, where it is (typed, from a waypoint or
  * from where you stand) and its size in blocks. Presets fill in a circle's radius and colour in
- * one click; "Add all presets" adds one circle per preset at once, for a despawn sphere's rings.
+ * one click.
  */
 class ShapeEditScreen private constructor(
     private val parent: Screen?,
@@ -52,8 +53,13 @@ class ShapeEditScreen private constructor(
     private var lineWidth: Float = from?.lineWidth ?: Config.DEFAULT_LINE_WIDTH
 
     /** A new shape can be made in MiniHUD instead, when MiniHUD is installed. */
-    private var inMiniHud = sharedMiniHudType != null && MiniHudShapes.installed && Config.showMiniHud &&
-        Dimensions.ofPlayer() == dimension
+    private var inMiniHud = sharedMiniHudType != null && Config.showMiniHud && MiniHudShapes.canReach(dimension)
+
+    /** How a shape made in MiniHUD stands up in the world; kept to the kinds the shape has. */
+    private var form: MiniHudGeometry.Form? = null
+
+    /** The shape last warned about being big enough to slow the game, so a second Save makes it. */
+    private var lagWarned: String? = null
 
     private var xText = x.toString()
     private var zText = z.toString()
@@ -186,21 +192,53 @@ class ShapeEditScreen private constructor(
         // Where a new shape goes: here, or MiniHUD, which draws it in the world too.
         if (existing == null && MiniHudShapes.installed && Config.showMiniHud) {
             val inThisDimension = Dimensions.ofPlayer() == dimension
+            // Another dimension's shapes go into MiniHUD's file for it, which MiniHUD loads on arriving there.
+            val reachable = MiniHudShapes.canReach(dimension)
+            // A shared MiniHUD shape comes back as the kind it was, so only a shape of your own gets the choice.
+            val choose = inMiniHud && reachable && sharedMiniHudType == null
+            val whereWidth = if (choose) (WIDTH - GAP) / 2 else WIDTH
             addRenderableWidget(
                 CycleButton.builder<Boolean>({ Component.literal(if (it) "Make it in MiniHUD" else "Make it in Sky's Map Shapes") }, inMiniHud)
                     .withValues(listOf(false, true))
                     .displayOnlyValue()
-                    .create(left, y, WIDTH, ROW, Component.literal("Where")) { _, value -> inMiniHud = value }
+                    .create(left, y, whereWidth, ROW, Component.literal("Where")) { _, value -> keepEdits(); inMiniHud = value; rebuildWidgets() }
                     .also {
-                        it.active = inThisDimension
+                        it.active = reachable
                         it.setTooltip(Tooltip.create(Component.literal(
-                            if (inThisDimension)
-                                "MiniHUD: it becomes an ordinary MiniHUD shape, shown in the world as well as on the map, and edited in MiniHUD. " +
-                                    "A flat shape needs a height, so it is put at your feet: spheres centred there, prisms and boxes ${MiniHudShapes.PRISM_HEIGHT} blocks tall around it. Change it afterwards in MiniHUD's editor."
-                            else "MiniHUD only holds shapes for the dimension you are in."
+                            when {
+                                !reachable -> "MiniHUD's files for the ${Dimensions.name(dimension)} could not be found."
+                                inThisDimension ->
+                                    "MiniHUD: it becomes an ordinary MiniHUD shape, shown in the world as well as on the map, and edited in MiniHUD. " +
+                                        "A flat shape needs a height, so it is put at your feet. Change it afterwards in MiniHUD's editor."
+                                else ->
+                                    "MiniHUD: it becomes an ordinary MiniHUD shape, shown in the world as well as on the map. " +
+                                        "You are not in the ${Dimensions.name(dimension)}, so it goes into MiniHUD's file for it, at height ${sharedY ?: MapMenus.SEA_LEVEL}, " +
+                                        "and MiniHUD has it when you go there. Change it afterwards in MiniHUD's editor."
+                            }
                         )))
                     }
             )
+            if (choose) {
+                val forms = MiniHudGeometry.forms(type)
+                val current = form?.takeIf { it in forms } ?: forms.first()
+                form = current
+                fun tip(f: MiniHudGeometry.Form) = Tooltip.create(Component.literal(
+                    "How it stands up in the world. " + MiniHudGeometry.formTip(f) +
+                        if (forms.size == 1) "\nMiniHUD has only this for a ${type.title.lowercase()}." else ""
+                ))
+                addRenderableWidget(
+                    CycleButton.builder<MiniHudGeometry.Form>({ Component.literal(MiniHudGeometry.formName(type, it)) }, current)
+                        .withValues(forms)
+                        .create(left + whereWidth + GAP, y, WIDTH - whereWidth - GAP, ROW, Component.literal("As")) { button, value ->
+                            form = value
+                            button.setTooltip(tip(value))
+                        }
+                        .also {
+                            it.active = forms.size > 1
+                            it.setTooltip(tip(current))
+                        }
+                )
+            }
             y += ROW + GAP
         }
 
@@ -239,15 +277,8 @@ class ShapeEditScreen private constructor(
 
         // Keep, undo, and the one that throws it away, always in the same places.
         val keep = Button.builder(Component.literal(if (existing == null) "Add" else "Save")) { save() }
-        val extra: Button.Builder? = when {
-            existing != null -> Button.builder(Component.literal("Delete…")) { MapMenus.confirmDelete(parent, existing) }
-            presets.size > 1 -> Button.builder(Component.literal("Add all presets")) { addAllPresets() }
-                .tooltip(Tooltip.create(Component.literal(
-                    "Add one circle per preset at this position: " +
-                        presets.joinToString(", ") { "${it.name} ${Shape.number(it.radius)}" } + "."
-                )))
-            else -> null
-        }
+        val extra: Button.Builder? =
+            if (existing != null) Button.builder(Component.literal("Delete…")) { MapMenus.confirmDelete(parent, existing) } else null
         if (extra == null) {
             val half = (WIDTH - GAP) / 2
             addRenderableWidget(keep.bounds(left, y, half, ROW).build())
@@ -331,36 +362,26 @@ class ShapeEditScreen private constructor(
             }
         }
         if (existing == null && inMiniHud) {
-            if (!MiniHudShapes.create(shape, sharedY ?: playerY(), sharedMiniHudType)) {
-                return show("MiniHUD would not take that shape; the log says why.")
+            MiniHudGeometry.whyTooBig(shape, form)?.let { return show(it.substringBefore(" It stays")) }
+            // A shape big enough to slow the game is made on the second press, once that has been said.
+            val warning = MiniHudGeometry.lagWarning(shape, form)
+            val asked = "$type $radiusText $widthText $lengthText $form"
+            if (warning != null && lagWarned != asked) {
+                lagWarned = asked
+                return show("$warning Press Save again to make it anyway.")
             }
-            MapMenus.say("Made ${shape.name} in MiniHUD")
+            MiniHudShapes.create(shape, sharedY ?: playerY(), sharedMiniHudType, form)?.let { return show(it.substringBefore(", so it stays")) }
+            MapMenus.say("Made ${shape.name} in MiniHUD" + (form?.let { " as a " + MiniHudGeometry.formName(type, it).lowercase() } ?: "") +
+                if (Dimensions.ofPlayer() == dimension) "" else ", there when you next go to the ${Dimensions.name(dimension)}")
         } else {
             ShapeStore.put(if (existing != null) shape.copy(id = existing.id, visible = existing.visible, y = existing.y) else shape)
         }
         minecraft.gui.setScreen(parent)
     }
 
-    private fun addAllPresets() {
-        keepEdits()
-        val x = xText.toIntOrNull() ?: return show("Type a whole number for X.")
-        val z = zText.toIntOrNull() ?: return show("Type a whole number for Z.")
-        val base = label.trim().takeUnless { name -> name.isEmpty() || Config.presets.any { it.name == name } }
-        for (preset in Config.presets) {
-            val shape = Shape(
-                label = if (base == null) preset.name else "$base: ${preset.name}",
-                dimension = dimension, type = Shape.Type.CIRCLE, x = x, z = z,
-                radius = preset.radius, colour = preset.colour, fill = fill, lineWidth = lineWidth,
-            )
-            if (inMiniHud) MiniHudShapes.create(shape, playerY()) else ShapeStore.put(shape)
-        }
-        MapMenus.say("Added ${Config.presets.size} ${if (inMiniHud) "spheres in MiniHUD" else "circles"} at $x, $z")
-        minecraft.gui.setScreen(parent)
-    }
-
     /** The height a shape made in MiniHUD is put at: where you stand, or the sea level if elsewhere. */
     private fun playerY(): Int =
-        if (Dimensions.ofPlayer() == dimension) minecraft.player?.blockY ?: 64 else 64
+        if (Dimensions.ofPlayer() == dimension) minecraft.player?.blockY ?: MapMenus.SEA_LEVEL else MapMenus.SEA_LEVEL
 
     private fun size(text: String): Double? = text.trim().toDoubleOrNull()?.takeIf { it > 0 && it <= MAX_SIZE }
 
@@ -392,8 +413,8 @@ class ShapeEditScreen private constructor(
             shared.shape, shared.miniHudType, shared.y,
         )
 
-        fun forNew(parent: Screen?, dimension: String, x: Int, z: Int, label: String) =
-            ShapeEditScreen(parent, null, dimension, x, z, label)
+        fun forNew(parent: Screen?, dimension: String, x: Int, z: Int, label: String, y: Int? = null) =
+            ShapeEditScreen(parent, null, dimension, x, z, label, sharedY = y)
 
         fun forExisting(parent: Screen?, shape: Shape) =
             ShapeEditScreen(parent, shape, shape.dimension, shape.x, shape.z, shape.label)

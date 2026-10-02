@@ -1,11 +1,14 @@
 package com.skystormer.skysmapshapes
 
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import java.lang.reflect.Method
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.Screen
@@ -13,11 +16,15 @@ import net.minecraft.client.gui.screens.Screen
 /**
  * MiniHUD's shapes, as outlines on the map. Optional: without MiniHUD installed this does nothing.
  *
- * Read-only and one way. The dimension you are in comes from MiniHUD's live shape list, so a
- * shape added, changed or deleted in MiniHUD shows here within half a second; other dimensions
- * come from the files MiniHUD saves for them. Nothing is ever written to MiniHUD, and shapes
- * added on the map stay this mod's own. MiniHUD's own renderer being switched off makes no
- * difference: its shapes are still shown on the map.
+ * The dimension you are in comes from MiniHUD's live shape list, so a shape added, changed or
+ * deleted in MiniHUD shows here within half a second; other dimensions come from the files
+ * MiniHUD saves for them. MiniHUD's own renderer being switched off makes no difference: its
+ * shapes are still shown on the map.
+ *
+ * Shapes are only changed in MiniHUD when asked: made, switched on or off, or deleted. In the
+ * dimension you are in that goes through MiniHUD's live list. In another it goes into that
+ * dimension's file, which is safe because MiniHUD only writes the file of the dimension it is
+ * leaving and reads a dimension's file on arriving there, so the change is what it then loads.
  *
  * Each 3D shape becomes the outline of its footprint seen from above: a sphere its widest circle,
  * a prism or pyramid its base, a box its rectangle, a line its line.
@@ -51,6 +58,7 @@ object MiniHudShapes {
         val export: Method,
         val storageName: Method,
         val addShape: Method,
+        val removeShape: Method,
         val shapeClass: Class<*>,
     )
 
@@ -65,6 +73,7 @@ object MiniHudShapes {
                 export = managerClass.getMethod("exportShapeToJson", shapeClass),
                 storageName = strings.getMethod("getStorageFileName", Boolean::class.javaPrimitiveType, String::class.java, String::class.java, String::class.java),
                 addShape = managerClass.getMethod("addShape", shapeClass),
+                removeShape = managerClass.getMethod("removeShape", shapeClass),
                 shapeClass = shapeClass,
             ).also { Log.info("MiniHUD found: its shapes will be shown on the map") }
         } catch (e: Throwable) {
@@ -173,7 +182,7 @@ object MiniHudShapes {
         val shapes = try {
             val json = Files.newBufferedReader(file).use { JsonParser.parseReader(it) }.asJsonObject
             json.getAsJsonObject("shapes")?.getAsJsonArray("shapes")?.mapNotNull {
-                it.takeIf { e -> e.isJsonObject }?.let { e -> parse(e.asJsonObject, dimension) }
+                it.takeIf { e -> e.isJsonObject }?.let { e -> parse(e.asJsonObject, dimension, file = file) }
             } ?: emptyList()
         } catch (e: Exception) {
             Log.warn("Could not read MiniHUD's {}: {}", file.fileName, e.toString())
@@ -186,7 +195,7 @@ object MiniHudShapes {
     private val unknownTypes = HashSet<String>()
 
     /** One of MiniHUD's shapes, from the JSON it saves, as an outline; null for one with nothing to draw. */
-    fun parse(json: JsonObject, dimension: String, handle: Any? = null): MiniHudShape? {
+    fun parse(json: JsonObject, dimension: String, handle: Any? = null, file: Path? = null): MiniHudShape? {
         val type = json.get("type")?.asString ?: return null
         // Shapes switched off in MiniHUD are still listed, greyed out, so they can be switched
         // back on from here; whether they are drawn is up to [MiniHudShape.visible].
@@ -199,47 +208,162 @@ object MiniHudShapes {
         val colour = json.get("color")?.asInt?.let { it or 0xFF000000.toInt() } ?: Colours.WHITE.argb
         // The same shape keeps the same id while it is not changed, so hiding it here sticks.
         val id = "minihud:" + dimension + ":" + type + ":" + MiniHudGeometry.identity(json)
-        return MiniHudShape(id, label, dimension, colour, geometry, type, enabled, MiniHudGeometry.heightOf(json), handle)
+        return MiniHudShape(id, label, dimension, colour, geometry, type, enabled, MiniHudGeometry.heightOf(json), handle, file)
     }
 
     /**
      * Makes [shape] in MiniHUD, at height [y], as if it had been added in MiniHUD's own shape
      * list: it is then a MiniHUD shape, in the world as well as on the map, and this mod keeps no
-     * copy of it. Only for the dimension you are in, which is the only one MiniHUD has open.
+     * copy of it. In the dimension you are in it goes straight into MiniHUD; in another, into
+     * that dimension's file, and MiniHUD has it when you next go there.
      *
-     * A flat map shape has to be given a height: spheres and ellipsoids are centred on [y], and
-     * the upright prisms (square, diamond, octagon, rectangle) run 128 blocks above and below it.
-     * All of that can be changed afterwards in MiniHUD's editor.
+     * A flat map shape has to be given a height, and [form] says how it stands up: spheres and
+     * ellipsoids are centred on [y], cylinders, prisms and boxes run 128 blocks above and below
+     * it, and cones and pyramids rise from it. All of that can be changed afterwards in MiniHUD's editor.
+     *
+     * Says why not when MiniHUD did not take it, so the caller keeps its own copy; null when it did.
+     * MiniHUD quietly drops a size over its limits, so the shape is read back before it is added,
+     * and one that came out a different size is not added at all.
      */
-    fun create(shape: Shape, y: Int, typeId: String? = null): Boolean {
-        val api = api ?: return false
+    internal fun create(shape: Shape, y: Int, typeId: String? = null, form: MiniHudGeometry.Form? = null): String? {
+        val api = api ?: return "This version of MiniHUD could not be read."
+        // Checked as the kind MiniHUD will really make, which for a shared shape may be another form.
+        MiniHudGeometry.whyTooBig(shape, typeId?.let { MiniHudGeometry.formOfType(it) } ?: form)?.let { return it }
+        val here = Dimensions.ofPlayer() == shape.dimension
+        val file = if (here) null else fileFor(shape.dimension)
+            ?: return "MiniHUD's files for this world could not be found, so it stays on this mod's map."
         return try {
-            val json = MiniHudGeometry.toMiniHudJson(shape, y) ?: return false
+            val json = MiniHudGeometry.toMiniHudJson(shape, y, form) ?: return "MiniHUD has no shape like that."
             // A shared MiniHUD shape is made again as the kind it was, when that kind fits these fields.
             if (typeId != null) MiniHudGeometry.retype(json, typeId)
+            val kind = json.get("type").asString
             val typeClass = Class.forName("fi.dy.masa.minihud.renderer.shapes.ShapeType")
-            val type = typeClass.getMethod("fromString", String::class.java).invoke(null, json.get("type").asString)
-                ?: return false.also { Log.warn("MiniHUD has no shape type '{}'", json.get("type").asString) }
+            val type = typeClass.getMethod("fromString", String::class.java).invoke(null, kind)
+                ?: return "This MiniHUD has no $kind shape.".also { Log.warn("MiniHUD has no shape type '{}'", kind) }
             val made = typeClass.getMethod("createShape").invoke(type)
             api.shapeClass.getMethod("fromJson", JsonObject::class.java).invoke(made, json)
-            api.addShape.invoke(api.manager, made)
+            val took = api.shapeClass.getMethod("toJson").invoke(made) as JsonObject
+            if (!MiniHudGeometry.tookSize(json, took)) {
+                Log.warn("MiniHUD did not take {} at its size: asked for {}, got {}", shape.name, json, took)
+                return "MiniHUD would not take it at its full size, so it stays on this mod's map."
+            }
+            if (file == null) {
+                api.addShape.invoke(api.manager, made)
+            } else {
+                // Saved as MiniHUD itself would save it, so it loads the same as one made there.
+                if (!editFile(file) { shapes -> shapes.add(took); true }) return "MiniHUD's file could not be written; the log says why."
+                Log.info("Added {} to MiniHUD's file for the {}", shape.name, Dimensions.name(shape.dimension))
+            }
+            tick(Minecraft.getInstance(), force = true)
+            null
+        } catch (e: Throwable) {
+            Log.error("Could not make ${shape.name} in MiniHUD", e)
+            "MiniHUD would not take that shape; the log says why."
+        }
+    }
+
+    /** Whether shapes can be made in MiniHUD for [dimension]: live where you are, else through its file. */
+    fun canReach(dimension: String): Boolean =
+        installed && api != null && (Dimensions.ofPlayer() == dimension || fileFor(dimension) != null)
+
+    /** MiniHUD's file for [dimension] on this server, whether or not it exists yet. */
+    private fun fileFor(dimension: String): Path? {
+        val api = api ?: return null
+        val prefix = filePrefix(api) ?: return null
+        if (!Dimensions.isId(dimension)) return null
+        val folder = FabricLoader.getInstance().configDir.resolve("minihud").normalize()
+        val file = folder.resolve(prefix + dimension.replace(':', '_') + ".json").normalize()
+        // Never anywhere but MiniHUD's own folder, whatever the names it is built from.
+        return file.takeIf { it.parent == folder }
+    }
+
+    private val GSON = GsonBuilder().setPrettyPrinting().create()
+
+    /**
+     * Changes the shapes in one of MiniHUD's dimension files, keeping everything else in it.
+     * [change] gets the list of shapes and says whether it changed anything; only then is the
+     * file written, by a new file replacing the old so a failure never leaves half a file.
+     */
+    private fun editFile(file: Path, change: (JsonArray) -> Boolean): Boolean = try {
+        val root = if (Files.exists(file)) Files.newBufferedReader(file).use { JsonParser.parseReader(it) }.asJsonObject else JsonObject()
+        val holder = root.getAsJsonObject("shapes") ?: JsonObject().also { root.add("shapes", it) }
+        val shapes = holder.getAsJsonArray("shapes") ?: JsonArray().also { holder.add("shapes", it) }
+        if (change(shapes)) {
+            Files.createDirectories(file.parent)
+            val temp = file.resolveSibling(file.fileName.toString() + ".skysmapshapes.tmp")
+            Files.writeString(temp, GSON.toJson(root))
+            Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            fileCache.remove(file)
+        }
+        true
+    } catch (e: Exception) {
+        Log.error("Could not change MiniHUD's file $file", e)
+        false
+    }
+
+    /** Where [shape] is in a list of MiniHUD's saved shapes, by its id; -1 when it is not there. */
+    private fun indexIn(shapes: JsonArray, shape: MiniHudShape): Int = shapes.indexOfFirst { element ->
+        element.isJsonObject && parse(element.asJsonObject, shape.dimension)?.id == shape.id
+    }
+
+    /**
+     * Deletes [shape] from MiniHUD, which takes it off the map too: from MiniHUD's live list in
+     * the dimension you are in, from that dimension's file in another.
+     */
+    fun delete(shape: MiniHudShape): Boolean {
+        val api = api ?: return false
+        return try {
+            val handle = shape.handle
+            val file = shape.file
+            when {
+                handle != null -> api.removeShape.invoke(api.manager, handle)
+                file != null -> {
+                    var found = false
+                    val written = editFile(file) { shapes ->
+                        val i = indexIn(shapes, shape)
+                        if (i >= 0) { shapes.remove(i); found = true }
+                        found
+                    }
+                    if (!written) return false
+                    if (!found) return false.also { Log.warn("{} was not in MiniHUD's file any more", shape.name) }
+                }
+                else -> return false
+            }
             tick(Minecraft.getInstance(), force = true)
             true
         } catch (e: Throwable) {
-            Log.error("Could not make ${shape.name} in MiniHUD", e)
+            Log.error("Could not delete ${shape.name} from MiniHUD", e)
             false
         }
     }
 
     /**
      * Switches [shape] on or off in MiniHUD itself, as its own shape list does, so it goes from
-     * the world as well as the map. Only for shapes in the dimension you are in.
+     * the world too: live in the dimension you are in, in that dimension's file in another.
      */
     fun setEnabled(shape: MiniHudShape, enabled: Boolean): Boolean {
-        val handle = shape.handle ?: return false
+        val handle = shape.handle
+        val file = shape.file
         return try {
-            if (handle.javaClass.getMethod("isEnabled").invoke(handle) as Boolean != enabled) {
-                handle.javaClass.getMethod("toggleEnabled").invoke(handle)
+            when {
+                handle != null -> if (handle.javaClass.getMethod("isEnabled").invoke(handle) as Boolean != enabled) {
+                    handle.javaClass.getMethod("toggleEnabled").invoke(handle)
+                }
+                file != null -> {
+                    var found = false
+                    val written = editFile(file) { shapes ->
+                        val i = indexIn(shapes, shape)
+                        if (i >= 0) {
+                            found = true
+                            val json = shapes[i].asJsonObject
+                            json.remove("enabled")
+                            json.addProperty("enabled", enabled)
+                        }
+                        found
+                    }
+                    if (!written || !found) return false
+                }
+                else -> return false
             }
             tick(Minecraft.getInstance(), force = true)
             true

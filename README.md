@@ -18,21 +18,24 @@ beacon.
 ## What it does
 
 - **Add a shape anywhere.** Right-click the world map and choose **Add shape here**, right-click
-  one of your waypoints to centre a shape on it, or type in the coordinates yourself.
+  one of your waypoints to centre a shape on it, or type in the coordinates yourself. With
+  [Sky's Structure Map](https://github.com/SkyStormer1/SkysStructureMap) or
+  [Sky's Map Exposer](https://github.com/SkyStormer1/SkysMapExposer) installed, structures and
+  BlueMap markers have **Add shape here** too.
 - **Six kinds of shape:** circle, square, rectangle, diamond, octagon and ellipse. Circles,
   squares, diamonds and octagons are sized by their radius in blocks; rectangles and ellipses by
   their width and length.
 - **Presets in one click.** Two are set up to begin with, for vanilla's despawn distances: instant
-  despawn beyond 128 blocks, and no despawning within 32. **Add all presets** puts both rings
-  around a spot at once. Every preset can be renamed, resized and recoloured, because servers
-  change these distances.
+  despawn beyond 128 blocks, and no despawning within 32. Every preset can be renamed, resized and
+  recoloured, because servers change these distances.
 - **Label, colour, thickness and fill** for each shape, with a global thickness scale for all of
   them at once.
 - **Hover an outline** to see what it is, and right-click it to edit, hide or delete. Two shapes on
   top of each other are both offered.
 - **A shapes list**, from the **Shapes** button on the world map: search it, show or hide shapes,
   jump the map to one, edit or delete it. Hidden shapes stay listed, so they are easy to bring
-  back.
+  back. **Hide all** remembers which shapes it hid, and **Show all** brings back only those, so
+  shapes you had hidden yourself stay hidden. Press **Show all** again to show every shape.
 - **Share a shape with the people you play with**, the way Xaero shares a waypoint. Right-click it
   and choose **Share in chat…**, then pick who gets it:
   - **Everyone in chat**, as one ordinary line that everyone can see.
@@ -63,18 +66,41 @@ MiniHUD is optional. When it is installed, this mod and MiniHUD work as one:
 - **Shown even when MiniHUD's own shape renderer is off**, so you can keep the world clear and
   still see everything on the map.
 - **Edit** on a MiniHUD shape opens MiniHUD's own Shape Editor on it.
-- **Hide** switches it off in MiniHUD too, so it goes from the world as well. Right-click for
-  **Hide on the map only**, or turn off **Hide in MiniHUD** in the settings.
-- **Make a shape in MiniHUD from the map.** When adding one, switch **Make it in** to MiniHUD.
+- **Hide it where you want.** Right-click a MiniHUD shape for **Hide in both**, **Hide on the map
+  only** or **Hide in MiniHUD only** (it goes from the world but stays on the map). In the shapes
+  list, **Hide…** on a MiniHUD shape has a switch for each. The **Hide all: MiniHUD** setting says
+  whether **Hide all** and **Show all** switch MiniHUD's shapes off and on in MiniHUD too.
+- **Delete it from MiniHUD**, which takes it off the map too.
+- **Make a shape in MiniHUD from the map.** When adding one, switch **Make it in** to MiniHUD, and
+  choose what it becomes in the world.
 - **Move a shape you already have into MiniHUD**, from its right-click menu or its Edit screen. It
-  becomes an ordinary MiniHUD shape and leaves this mod's map, so it is not drawn twice.
+  becomes an ordinary MiniHUD shape and leaves this mod's map, so it is not drawn twice. It only
+  leaves once MiniHUD has it at its full size.
+- **Any dimension.** Deleting, switching on or off, making and moving work for shapes in other
+  dimensions too, and shared MiniHUD shapes can be added to them. Those changes go into MiniHUD's
+  saved file for that dimension, which MiniHUD loads when you go there. Only MiniHUD's Shape
+  Editor needs you to be in the shape's dimension.
 - **Share MiniHUD shapes too.** The shared shape carries MiniHUD's own kind of shape and the height
   it sits at: someone with MiniHUD gets the same shape in their world, and someone without it still
   gets the outline on their map.
 
-Map shapes are flat, so one made in MiniHUD is given a height: circles and ellipses become spheres
-and ellipsoids centred where you stand, and the others become 256-block-tall prisms and boxes
-around it. All of it can be changed afterwards in MiniHUD's editor.
+Map shapes are flat, so one made in MiniHUD is given a height, at your feet (or height 64 for
+another dimension), and you choose how it stands up:
+
+| Shape on the map | In MiniHUD, as |
+|:--|:--|
+| Circle | Cylinder, sphere or cone |
+| Square | Prism or pyramid |
+| Diamond | Prism or pyramid |
+| Octagon | Prism or pyramid |
+| Rectangle | Box |
+| Ellipse | Ellipsoid |
+
+Cylinders, prisms and boxes are 256 blocks tall, centred on that height; spheres and ellipsoids are
+centred on it; cones and pyramids rise from it, as tall as they are wide from the middle. All of it
+can be changed afterwards in MiniHUD's editor. MiniHUD's ellipsoids are at most 2048 blocks north to
+south, so a longer ellipse stays on this mod's map, and you are warned before moving a shape so big
+that MiniHUD drawing it may slow the game.
 
 ## Installing
 
@@ -97,9 +123,10 @@ Client-side only: it does nothing on the server and works on any server you join
 |:--|:--|
 | Add a shape | Right-click the world map → **Add shape here** |
 | Add one on a waypoint | Right-click the waypoint → **Add shape here** |
-| See all your shapes | **Shapes** button, top-left of the world map |
+| Add one on a structure or BlueMap marker | Right-click it → **Add shape here** (with Sky's Structure Map or Sky's Map Exposer) |
+| See all your shapes | The **Shapes** panel on the world map, or the full list from a key or the settings |
 | Edit or delete one | Right-click its outline or its label, or use the list |
-| Hide one for now | Right-click it → **Hide**, then **Show** it from the list |
+| Hide one for now | Right-click it → **Hide** (or a choice of where, for a MiniHUD shape), then **Show** it from the list |
 | Send one to your friends | Right-click it → **Share in chat…** |
 | Change the settings | Mod Menu → Sky's Map Shapes → cog |
 | Open the list with a key | Set one in Options → Controls → Sky's Map Shapes |

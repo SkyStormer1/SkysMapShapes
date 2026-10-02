@@ -100,13 +100,16 @@ class MiniHudTest {
 
     @Test
     fun ownShapesBecomeMiniHudShapesOfTheRightType() {
-        fun json(type: Shape.Type, radius: Double = 0.0, w: Double = 0.0, l: Double = 0.0) =
+        fun json(type: Shape.Type, radius: Double = 0.0, w: Double = 0.0, l: Double = 0.0, form: MiniHudGeometry.Form? = null) =
             MiniHudGeometry.toMiniHudJson(
                 Shape(label = "Test", dimension = "d", type = type, x = 10, z = -20, radius = radius, width = w, length = l, colour = Colours.RED.argb),
                 70,
+                form,
             )!!
 
-        val sphere = json(Shape.Type.CIRCLE, radius = 128.0)
+        // A circle stands up as a cylinder unless a sphere is asked for.
+        assertEquals("circle", json(Shape.Type.CIRCLE, radius = 128.0).get("type").asString)
+        val sphere = json(Shape.Type.CIRCLE, radius = 128.0, form = MiniHudGeometry.Form.SPHERE)
         assertEquals("sphere_blocky", sphere.get("type").asString)
         assertEquals(128.0, sphere.get("radius").asDouble)
         assertEquals(10.5, sphere.getAsJsonArray("center")[0].asDouble)

@@ -28,9 +28,9 @@ import kotlin.math.hypot
 /**
  * Every shape on this server, like Xaero's waypoint list: search by name, this dimension or all,
  * show or hide each (hidden ones stay listed, greyed, so they are easy to bring back), jump the
- * world map to one, edit or delete it.
+ * world map to one, edit or delete it. MiniHUD's can be deleted from here in any dimension.
  *
- * Opened from the Shapes button on the world map, its right-click menu, the settings, or a key
+ * Opened from the settings or a key
  * you can bind in Controls. The mouse wheel turns the pages.
  */
 class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("Shapes")) {
@@ -46,6 +46,7 @@ class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("S
     private lateinit var pageLabel: StringWidget
     private lateinit var previous: Button
     private lateinit var next: Button
+    private lateinit var showAll: Button
 
     private val left get() = width / 2 - listWidth / 2
     private val listWidth get() = minOf(MAX_WIDTH, width - 16)
@@ -82,12 +83,14 @@ class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("S
         previous = addRenderableWidget(Button.builder(Component.literal("<")) { page--; refreshRows() }.bounds(left, y, fifth, ROW).build())
         pageLabel = addRenderableWidget(StringWidget(left + fifth + GAP, y + 6, fifth, font.lineHeight, Component.empty(), font))
         next = addRenderableWidget(Button.builder(Component.literal(">")) { page++; refreshRows() }.bounds(left + (fifth + GAP) * 2, y, fifth, ROW).build())
-        addRenderableWidget(Button.builder(Component.literal("Show all")) { setAllVisible(true) }
-            .bounds(left + (fifth + GAP) * 3, y, fifth, ROW)
-            .tooltip(Tooltip.create(Component.literal("Show every shape in this list."))).build())
-        addRenderableWidget(Button.builder(Component.literal("Hide all")) { setAllVisible(false) }
+        showAll = addRenderableWidget(Button.builder(Component.literal("Show all")) { showAll() }
+            .bounds(left + (fifth + GAP) * 3, y, fifth, ROW).build())
+        addRenderableWidget(Button.builder(Component.literal("Hide all")) { hideAll() }
             .bounds(left + (fifth + GAP) * 4, y, listWidth - (fifth + GAP) * 4, ROW)
-            .tooltip(Tooltip.create(Component.literal("Hide every shape in this list."))).build())
+            .tooltip(Tooltip.create(Component.literal(
+                "Hide every shape in this list that is showing, and remember which, so Show all brings back only those." +
+                    if (Config.hideInMiniHud) " MiniHUD's are switched off in MiniHUD too (see the settings)." else " MiniHUD's are hidden on the map only (see the settings)."
+            ))).build())
         y += ROW + GAP
 
         addRenderableWidget(Button.builder(Component.literal("Add a shape where I am")) { addHere() }
@@ -117,6 +120,11 @@ class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("S
         pageLabel.message = Component.literal("${page + 1} / $pages")
         previous.active = page > 0
         next.active = page < pages - 1
+        val remembered = ShapeStore.hiddenByHideAll(shapes)
+        showAll.setTooltip(Tooltip.create(Component.literal(
+            if (remembered > 0) "Bring back the $remembered shape${if (remembered == 1) "" else "s"} Hide all hid here, and no others. Press it again after to show every shape."
+            else "Show every shape in this list" + if (Config.hideInMiniHud) ", switching MiniHUD's back on in MiniHUD too." else "."
+        )))
 
         if (shapes.isEmpty()) {
             val text = when {
@@ -155,15 +163,18 @@ class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("S
             row(text)
 
             var x = left + textWidth
-            val hide = Button.builder(Component.literal(if (shape.visible) "Hide" else "Show")) {
-                ShapeStore.setVisible(shape, !shape.visible)
-                refreshRows()
-            }.bounds(x, y, buttonWidth, ROW)
-            if (shape is MiniHudShape && shape.editable && Config.hideInMiniHud) {
-                hide.tooltip(Tooltip.create(Component.literal(
-                    if (shape.visible) "Switches it off in MiniHUD too, so it goes from the world. Right-click it on the map to hide it there only."
-                    else "Switches it back on in MiniHUD as well."
+            // One of MiniHUD's can be on the map, in MiniHUD (the world), both or neither, so it gets a choice.
+            val hide = if (shape is MiniHudShape) {
+                Button.builder(Component.literal(if (shape.visible) "Hide…" else "Show…")) {
+                    minecraft.gui.setScreen(MiniHudVisibilityScreen(this, shape))
+                }.bounds(x, y, buttonWidth, ROW).tooltip(Tooltip.create(Component.literal(
+                    "On the map: ${if (shape.visible) "shown" else "hidden"}. In MiniHUD: ${if (shape.enabledInMiniHud) "on" else "off"}.\nChoose where it shows."
                 )))
+            } else {
+                Button.builder(Component.literal(if (shape.visible) "Hide" else "Show")) {
+                    ShapeStore.setVisible(shape, !shape.visible)
+                    refreshRows()
+                }.bounds(x, y, buttonWidth, ROW)
             }
             row(hide.build())
             x += buttonWidth + GAP
@@ -191,9 +202,14 @@ class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("S
             x += buttonWidth + GAP
             val delete = Button.builder(Component.literal("Delete")) {
                 own?.let { MapMenus.confirmDelete(this, it) }
+                miniHud?.let { MapMenus.confirmDelete(this, it) }
             }.bounds(x, y, buttonWidth, ROW)
-            if (own == null) delete.tooltip(Tooltip.create(Component.literal("A MiniHUD shape: delete it in MiniHUD and it goes from the map too. Hide just hides it here.")))
-            row(delete.build().also { it.active = own != null })
+            if (miniHud != null) delete.tooltip(Tooltip.create(Component.literal(
+                if (miniHud.changeable) "Delete it from MiniHUD, which takes it off the map too." +
+                    (if (miniHud.editable) "" else " It is in the ${Dimensions.name(shape.dimension)}, so it is taken out of MiniHUD's file for it.")
+                else "MiniHUD's file for the ${Dimensions.name(shape.dimension)} could not be found."
+            )))
+            row(delete.build().also { it.active = own != null || miniHud?.changeable == true })
             y += ROW + GAP
         }
     }
@@ -202,8 +218,13 @@ class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("S
         rowWidgets.add(addRenderableWidget(widget))
     }
 
-    private fun setAllVisible(visible: Boolean) {
-        for (shape in shapes()) if (shape.visible != visible) ShapeStore.setVisible(shape, visible)
+    private fun hideAll() {
+        ShapeStore.hideAll(shapes(), Config.hideInMiniHud)
+        refreshRows()
+    }
+
+    private fun showAll() {
+        ShapeStore.showAll(shapes(), Config.hideInMiniHud)
         refreshRows()
     }
 

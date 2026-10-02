@@ -22,7 +22,7 @@ object Config {
     private val file: Path
         get() = FabricLoader.getInstance().configDir.resolve("skysmapshapes.json")
 
-    /** Off turns the whole mod off: nothing drawn, no menu options, no Shapes button. Shapes are kept. */
+    /** Off turns the whole mod off: nothing drawn, no menu options, no Shapes panel. Shapes are kept. */
     var enabled = true
 
     var showOnWorldMap = true
@@ -36,8 +36,9 @@ object Config {
     var miniHudIncludeDisabled = false
 
     /**
-     * Whether hiding a MiniHUD shape on the map also switches it off in MiniHUD, so it goes from
-     * the world too. Off means hiding only affects the map.
+     * Whether Hide all and Show all in the Shapes list also switch MiniHUD's shapes off and on in
+     * MiniHUD, so they go from the world too. Off means they only affect the map. (The name is
+     * kept from when it applied to hiding one shape, so existing settings carry over.)
      */
     var hideInMiniHud = true
 
@@ -49,6 +50,40 @@ object Config {
      * (or `msg`, or `w`); change it if yours uses something else.
      */
     var privateShareCommand = "tell"
+
+    /** The Shapes panel on the world map: whether it is there at all, and whether it is open or folded. */
+    var showPanel = true
+    var panelOpen = true
+
+    /** Where the panel sits: its right edge this far in from the screen's, its top this far down. Moved by dragging its title. */
+    var panelRight = 4
+    var panelTop = 60
+
+    /** How many lines the panel shows before scrolling. Changed by dragging its bottom edge. */
+    var panelRows = 8
+
+    /** The panel's size (1 = the game's own), the width added by dragging its right edge, and the panel it is docked under ("" for none). */
+    var panelScale = 1f
+    /** The panel's width when its place was saved, so it reads back to the same spot. */
+    var panelWidth = 0
+    var panelExtra = 0
+    var panelUnder = ""
+
+    /**
+     * The add shape window on the world map, which is a map panel too: where it sits on its own,
+     * whether it is folded, its size and extra width, and the panel it is docked under. It starts
+     * docked under the Shapes panel's stack.
+     */
+    var addRight = 4
+    var addTop = 60
+    var addOpen = true
+    var addScale = 1f
+    var addWidth = 0
+    var addExtra = 0
+    var addUnder = "skysmapshapes:panel"
+
+    /** The biggest the map panels may be made, before the letters look too blocky. */
+    var panelMaxScale = 2f
 
     /** Multiplies every shape's own outline thickness, to make them all thicker or thinner at once. */
     var thicknessScale = 1f
@@ -93,6 +128,23 @@ object Config {
             shareInChat = json.get("shareInChat")?.asBoolean ?: shareInChat
             privateShareCommand = json.get("privateShareCommand")?.asString?.trim()?.removePrefix("/")
                 ?.takeIf { it.isNotEmpty() } ?: privateShareCommand
+            showPanel = json.get("showPanel")?.asBoolean ?: showPanel
+            panelOpen = json.get("panelOpen")?.asBoolean ?: panelOpen
+            panelRight = json.get("panelRight")?.asInt ?: panelRight
+            panelTop = json.get("panelTop")?.asInt ?: panelTop
+            panelRows = (json.get("panelRows")?.asInt ?: panelRows).coerceIn(1, 40)
+            panelWidth = json.get("panelWidth")?.asInt ?: panelWidth
+            addWidth = json.get("addWidth")?.asInt ?: addWidth
+            panelScale = (json.get("panelScale")?.asFloat ?: panelScale).coerceIn(0.5f, 4f)
+            panelExtra = (json.get("panelExtra")?.asInt ?: panelExtra).coerceIn(0, 1000)
+            panelUnder = json.get("panelUnder")?.asString ?: panelUnder
+            addRight = json.get("addRight")?.asInt ?: addRight
+            addTop = json.get("addTop")?.asInt ?: addTop
+            addOpen = json.get("addOpen")?.asBoolean ?: addOpen
+            addScale = (json.get("addScale")?.asFloat ?: addScale).coerceIn(0.5f, 4f)
+            addExtra = (json.get("addExtra")?.asInt ?: addExtra).coerceIn(0, 1000)
+            addUnder = json.get("addUnder")?.asString ?: addUnder
+            panelMaxScale = (json.get("panelMaxScale")?.asFloat ?: panelMaxScale).coerceIn(1f, 4f)
             thicknessScale = (json.get("thicknessScale")?.asFloat ?: thicknessScale).coerceIn(MIN_SCALE, MAX_SCALE)
             fillOpacity = (json.get("fillOpacity")?.asFloat ?: fillOpacity).coerceIn(0f, 1f)
             json.getAsJsonArray("presets")?.let { array ->
@@ -120,6 +172,23 @@ object Config {
             json.addProperty("hideInMiniHud", hideInMiniHud)
             json.addProperty("shareInChat", shareInChat)
             json.addProperty("privateShareCommand", privateShareCommand)
+            json.addProperty("showPanel", showPanel)
+            json.addProperty("panelOpen", panelOpen)
+            json.addProperty("panelRight", panelRight)
+            json.addProperty("panelTop", panelTop)
+            json.addProperty("panelRows", panelRows)
+            json.addProperty("panelWidth", panelWidth)
+            json.addProperty("addWidth", addWidth)
+            json.addProperty("panelScale", panelScale)
+            json.addProperty("panelExtra", panelExtra)
+            json.addProperty("panelUnder", panelUnder)
+            json.addProperty("addRight", addRight)
+            json.addProperty("addTop", addTop)
+            json.addProperty("addOpen", addOpen)
+            json.addProperty("addScale", addScale)
+            json.addProperty("addExtra", addExtra)
+            json.addProperty("addUnder", addUnder)
+            json.addProperty("panelMaxScale", panelMaxScale)
             json.addProperty("thicknessScale", thicknessScale)
             json.addProperty("fillOpacity", fillOpacity)
             val array = JsonArray()
@@ -131,8 +200,7 @@ object Config {
                 })
             }
             json.add("presets", array)
-            Files.createDirectories(file.parent)
-            Files.writeString(file, GSON.toJson(json))
+            SafeFiles.writeString(file, GSON.toJson(json))
         } catch (e: Exception) {
             Log.error("Could not save $file", e)
         }

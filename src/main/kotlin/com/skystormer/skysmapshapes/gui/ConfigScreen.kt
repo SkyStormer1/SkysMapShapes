@@ -30,6 +30,7 @@ class ConfigScreen(private val parent: Screen?) : Screen(Component.literal("Sky'
     private var showOnMinimap = Config.showOnMinimap
     private var showLabels = Config.showLabels
     private var enabled = Config.enabled
+    private var showPanel = Config.showPanel
     private var thicknessScale = Config.thicknessScale
     private var showMiniHud = Config.showMiniHud
     private var miniHudIncludeDisabled = Config.miniHudIncludeDisabled
@@ -50,15 +51,16 @@ class ConfigScreen(private val parent: Screen?) : Screen(Component.literal("Sky'
         addRenderableWidget(StringWidget(left, y, WIDTH, font.lineHeight, title, font))
         y += font.lineHeight + GAP * 2
 
-        // The switch for the whole mod, and the way to the shapes list, first.
-        val halfTop = (WIDTH - GAP) / 2
-        addRenderableWidget(toggle(left, y, halfTop, "Sky's Map Shapes", enabled,
-            "Off turns the whole mod off: no shapes drawn, no right-click options, no Shapes button on the map. Your shapes are kept.") { enabled = it })
+        // The switch for the whole mod, the panel, and the way to the shapes list, first.
+        addRenderableWidget(toggle(left, y, third, "Mod", enabled,
+            "Off turns the whole mod off: no shapes drawn, no right-click options, no Shapes panel on the map. Your shapes are kept.") { enabled = it })
+        addRenderableWidget(toggle(left + third + GAP, y, third, "Map panel", showPanel,
+            "The Shapes panel on the world map: every shape in the dimension shown, to hide, show or right-click. It docks under Sky's Map Exposer's bar or Sky's Structure Map's legend.") { showPanel = it })
         addRenderableWidget(Button.builder(Component.literal("Shapes list…")) {
             save()
             minecraft.gui.setScreen(ShapeListScreen(this))
-        }.bounds(left + halfTop + GAP, y, WIDTH - halfTop - GAP, ROW)
-            .tooltip(Tooltip.create(Component.literal("All your shapes, as on the world map's Shapes button: show, hide, edit or delete them.")))
+        }.bounds(left + (third + GAP) * 2, y, WIDTH - (third + GAP) * 2, ROW)
+            .tooltip(Tooltip.create(Component.literal("All your shapes: show, hide, find, edit or delete them.")))
             .build())
         y += ROW + GAP * 3
 
@@ -72,8 +74,8 @@ class ConfigScreen(private val parent: Screen?) : Screen(Component.literal("Sky'
         addRenderableWidget(toggle(left, y, third, "MiniHUD shapes", showMiniHud,
             if (installed) "Show MiniHUD's shapes on the map as outlines, even with MiniHUD's own shape renderer off. Delete one in MiniHUD and it goes from the map too."
             else "MiniHUD is not installed.") { showMiniHud = it }.also { it.active = installed })
-        addRenderableWidget(toggle(left + third + GAP, y, third, "Hide in MiniHUD", hideInMiniHud,
-            "On: hiding a MiniHUD shape here switches it off in MiniHUD too, so it goes from the world as well. Off: hiding only affects the map. Either way, the right-click menu can hide it on the map only.") { hideInMiniHud = it }.also { it.active = installed })
+        addRenderableWidget(toggle(left + third + GAP, y, third, "Hide all: MiniHUD", hideInMiniHud,
+            "On: Hide all and Show all in the Shapes list switch MiniHUD's shapes off and on in MiniHUD too, so they go from the world as well. Off: they only hide them on the map. One shape at a time, you choose each time.") { hideInMiniHud = it }.also { it.active = installed })
         addRenderableWidget(toggle(left + (third + GAP) * 2, y, third, "Ones off in MiniHUD", miniHudIncludeDisabled,
             "Also draw MiniHUD shapes that are switched off in MiniHUD. They are always in the shapes list, so they can be switched back on.") { miniHudIncludeDisabled = it }.also { it.active = installed })
         y += ROW + GAP
@@ -157,6 +159,7 @@ class ConfigScreen(private val parent: Screen?) : Screen(Component.literal("Sky'
         Config.showOnMinimap = showOnMinimap
         Config.showLabels = showLabels
         Config.enabled = enabled
+        Config.showPanel = showPanel
         Config.thicknessScale = thicknessScale
         Config.showMiniHud = showMiniHud
         Config.miniHudIncludeDisabled = miniHudIncludeDisabled

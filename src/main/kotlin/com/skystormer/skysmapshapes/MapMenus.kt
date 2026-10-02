@@ -1,7 +1,8 @@
 package com.skystormer.skysmapshapes
 
+import com.skystormer.skysmapshapes.gui.AddShapeWindow
 import com.skystormer.skysmapshapes.gui.ShapeEditScreen
-import com.skystormer.skysmapshapes.gui.ShapeListScreen
+import com.skystormer.skysmapshapes.gui.MoveToMiniHudScreen
 import com.skystormer.skysmapshapes.gui.ShareScreen
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.ConfirmScreen
@@ -29,17 +30,12 @@ object MapMenus {
             val dim = dimension?.identifier()?.toString() ?: Dimensions.ofMap()
                 ?: return@guard Log.warn("Map right-click: no dimension, so no shape options")
             if (!ShapeStore.isOpen) return@guard Log.warn("Map right-click: no shapes file open (not in a world?)")
-            options.add(option("Add shape here", options.size, target) { parent ->
-                open(ShapeEditScreen.forNew(parent, dim, x, z, ""))
-            })
+            options.add(option("Add shape here", options.size, target) { parent -> add(parent, dim, x, z, "") })
             // Every shape under the click can be edited from here, even one whose label is off screen.
             val under = ShapeStore.inDimension(dim).filter { it.contains(x, z) }
             for (shape in under.take(MAX_UNDER_CLICK)) {
-                options.add(option("Edit shape: ${shape.name}", options.size, target) { parent ->
-                    ShapeStore.byId(shape.id)?.let { open(ShapeEditScreen.forExisting(parent, it)) }
-                })
+                options.add(option("Edit shape: ${shape.name}", options.size, target) { parent -> edit(parent, shape) })
             }
-            options.add(option("All shapes…", options.size, target) { parent -> open(ShapeListScreen(parent)) })
         }
     }
 
@@ -55,13 +51,16 @@ object MapMenus {
             val x = floor(waypoint.renderX).toInt()
             val z = floor(waypoint.renderZ).toInt()
             val name = waypoint.name
-            options.add(option("Add shape here", options.size, target) { parent ->
-                open(ShapeEditScreen.forNew(parent, dim, x, z, name))
-            })
+            // The waypoint's height, when it has one, so a MiniHUD shape made here is centred on it.
+            val y = if (waypoint.isyIncluded()) waypoint.y else null
+            options.add(option("Add shape here", options.size, target) { parent -> add(parent, dim, x, z, name, y) })
         }
     }
 
-    /** A shape's label or outline on the world map. MiniHUD's can only be hidden here. */
+    /**
+     * A shape's label or outline on the world map, or its line in the Shapes panel, where it may be
+     * hidden. MiniHUD's are edited in MiniHUD.
+     */
     fun addShapeOptions(options: ArrayList<RightClickOption>, target: IRightClickableElement, shape: MapShape) {
         if (shape is MiniHudShape) {
             options.add(option(
@@ -70,29 +69,83 @@ object MapMenus {
                 else "MiniHUD can only edit shapes in the dimension you are in.\n" +
                     "Go to the ${Dimensions.name(shape.dimension)} to edit this one.",
             ) { parent -> MiniHudShapes.openEditor(shape, parent) }.setActive(shape.editable))
-            options.add(option(if (Config.hideInMiniHud && shape.editable) "Hide, in MiniHUD too" else "Hide on the map", options.size, target) { _ ->
-                ShapeStore.setVisible(shape, false)
-                say("Hid ${shape.name}. Show it again from the Shapes list.")
-            })
+            val cannot = if (shape.changeable) null else "MiniHUD's file for the ${Dimensions.name(shape.dimension)} could not be found."
+            if (!shape.visible) {
+                // Only from the panel: the map has nothing to right-click on.
+                options.add(option("Show on the map", options.size, target,
+                    tip = "Back on the map. In MiniHUD it stays ${if (shape.enabledInMiniHud) "on" else "off"}.") { _ ->
+                    ShapeStore.setVisible(shape, true)
+                    say("Showing ${shape.name} on the map.")
+                })
+                if (!shape.enabledInMiniHud) {
+                    options.add(option("Show in both", options.size, target,
+                        tip = cannot ?: "On the map, and switched on in MiniHUD so it is in the world too.") { _ ->
+                        if (ShapeStore.setInMiniHud(shape, true)) {
+                            ShapeStore.setVisible(shape, true)
+                            say("Showing ${shape.name} on the map and in MiniHUD.")
+                        } else {
+                            say("MiniHUD would not switch ${shape.name} on; the log says why.")
+                        }
+                    }.setActive(shape.changeable))
+                }
+                options.add(option(if (shape.enabledInMiniHud) "Switch off in MiniHUD" else "Switch on in MiniHUD", options.size, target,
+                    tip = cannot ?: "Leaves it off the map.") { _ ->
+                    val on = !shape.enabledInMiniHud
+                    if (ShapeStore.setInMiniHud(shape, on)) say("Switched ${shape.name} ${if (on) "on" else "off"} in MiniHUD.")
+                    else say("MiniHUD would not switch ${shape.name} ${if (on) "on" else "off"}; the log says why.")
+                }.setActive(shape.changeable))
+            } else if (shape.enabledInMiniHud) {
+                options.add(option("Hide in both", options.size, target,
+                    tip = cannot ?: "Off the map, and switched off in MiniHUD so it goes from the world too.") { _ ->
+                    if (ShapeStore.setInMiniHud(shape, false)) {
+                        ShapeStore.setVisible(shape, false)
+                        say("Hid ${shape.name} on the map and in MiniHUD. Show it again from the Shapes list.")
+                    } else {
+                        say("MiniHUD would not switch ${shape.name} off; the log says why.")
+                    }
+                }.setActive(shape.changeable))
+                options.add(option("Hide on the map only", options.size, target,
+                    tip = "Off the map. It stays on in MiniHUD, in the world.") { _ ->
+                    ShapeStore.setVisible(shape, false)
+                    say("Hid ${shape.name} on the map. It is still on in MiniHUD.")
+                })
+                options.add(option("Hide in MiniHUD only", options.size, target,
+                    tip = cannot ?: "Switched off in MiniHUD, so it goes from the world. It stays on the map.") { _ ->
+                    if (ShapeStore.setInMiniHud(shape, false)) say("Switched ${shape.name} off in MiniHUD. It is still on the map.")
+                    else say("MiniHUD would not switch ${shape.name} off; the log says why.")
+                }.setActive(shape.changeable))
+            } else {
+                options.add(option("Hide on the map", options.size, target, tip = "It is already off in MiniHUD.") { _ ->
+                    ShapeStore.setVisible(shape, false)
+                    say("Hid ${shape.name}. Show it again from the Shapes list.")
+                })
+                options.add(option("Switch on in MiniHUD", options.size, target,
+                    tip = cannot ?: "Switched back on in MiniHUD, so it is in the world again.") { _ ->
+                    if (ShapeStore.setInMiniHud(shape, true)) say("Switched ${shape.name} on in MiniHUD.")
+                    else say("MiniHUD would not switch ${shape.name} on; the log says why.")
+                }.setActive(shape.changeable))
+            }
             if (ShapeShare.asShape(shape) != null) {
                 options.add(option("Share in chat…", options.size, target) { parent -> confirmShare(parent, shape) })
             }
-            if (Config.hideInMiniHud && shape.editable) {
-                options.add(option("Hide on the map only", options.size, target) { _ ->
-                    ShapeStore.hideOnMapOnly(shape)
-                    say("Hid ${shape.name} on the map. It is still on in MiniHUD.")
-                })
-            }
+            options.add(option("Delete…", options.size, target,
+                tip = cannot ?: "Deletes it from MiniHUD, which takes it off the map too.") { parent -> confirmDelete(parent, shape) }
+                .setActive(shape.changeable))
             return
         }
         if (shape !is Shape) return
-        options.add(option("Edit…", options.size, target) { parent ->
-            ShapeStore.byId(shape.id)?.let { open(ShapeEditScreen.forExisting(parent, it)) }
-        })
-        options.add(option("Hide", options.size, target) { _ ->
-            ShapeStore.setVisible(shape, false)
-            say("Hid ${shape.name}. Show it again from the Shapes list.")
-        })
+        options.add(option("Edit…", options.size, target) { parent -> edit(parent, shape) })
+        if (shape.visible) {
+            options.add(option("Hide", options.size, target) { _ ->
+                ShapeStore.setVisible(shape, false)
+                say("Hid ${shape.name}. Show it again from the Shapes panel or list.")
+            })
+        } else {
+            options.add(option("Show", options.size, target) { _ ->
+                ShapeStore.setVisible(shape, true)
+                say("Showing ${shape.name}.")
+            })
+        }
         options.add(option("Share in chat…", options.size, target) { parent -> confirmShare(parent, shape) })
         if (MiniHudShapes.installed && Config.showMiniHud) {
             // Greyed out from another dimension, and the line itself says why on hover.
@@ -106,6 +159,24 @@ object MapMenus {
         options.add(option("Delete…", options.size, target) { parent -> confirmDelete(parent, shape) })
     }
 
+    /**
+     * A new shape at block ([x], [z]), at height [y] when it is known (a waypoint's): on the world map, in the window beside the Shapes panel with
+     * the shape drawn live; anywhere else, on the full add screen.
+     */
+    fun add(parent: Screen?, dimension: String, x: Int, z: Int, label: String, y: Int? = null) {
+        if (isWorldMap(parent)) AddShapeWindow.openNew(parent!!, dimension, x, z, label, y)
+        else open(ShapeEditScreen.forNew(parent, dimension, x, z, label, y))
+    }
+
+    /** Editing one of this mod's shapes, the same way round as [add]. */
+    fun edit(parent: Screen?, shape: Shape) {
+        val current = ShapeStore.byId(shape.id) ?: return
+        if (isWorldMap(parent) && Dimensions.ofMap() == current.dimension) AddShapeWindow.openExisting(parent!!, current)
+        else open(ShapeEditScreen.forExisting(parent, current))
+    }
+
+    private fun isWorldMap(screen: Screen?) = screen?.javaClass?.name == "xaero.map.gui.GuiMap"
+
     /** Asks who to share with first: everyone, or one player privately. */
     fun confirmShare(parent: Screen?, shape: MapShape) {
         if (ShapeShare.asShape(shape) == null) {
@@ -116,8 +187,9 @@ object MapMenus {
     }
 
     /**
-     * Asks first, then makes [shape] in MiniHUD and takes it off this mod's map, so there is one
-     * of it rather than two. MiniHUD only holds the dimension you are in.
+     * Asks first, and how it should stand up in the world, then makes [shape] in MiniHUD and takes
+     * it off this mod's map, so there is one of it rather than two. A shape in another dimension
+     * goes into MiniHUD's file for it.
      */
     fun confirmMoveToMiniHud(parent: Screen?, shape: Shape) {
         val player = Minecraft.getInstance().player
@@ -137,26 +209,46 @@ object MapMenus {
             say("${shape.name} is not on your map any more.")
             return
         }
+        val y = miniHudY(shape)
+        open(MoveToMiniHudScreen(parent, shape, y) { form ->
+            // Checked again here: the screen it was started from may have been left open.
+            if (ShapeStore.byId(shape.id) != null) {
+                // Only taken off this map once MiniHUD has it, at its full size.
+                val failed = MiniHudShapes.create(shape, y, form = form)
+                if (failed == null) {
+                    ShapeStore.remove(shape.id)
+                    say("${shape.name} is now a MiniHUD ${MiniHudGeometry.formName(shape.type, form).lowercase()}" +
+                        if (Dimensions.ofPlayer() == shape.dimension) "" else ", there when you next go to the ${Dimensions.name(shape.dimension)}")
+                } else {
+                    say(failed)
+                }
+            }
+            open(parent)
+        })
+    }
+
+    /**
+     * Asks first, then deletes one of MiniHUD's shapes from MiniHUD, which takes it off the map
+     * too, in any dimension: another dimension's shapes are deleted from MiniHUD's file for it.
+     */
+    fun confirmDelete(parent: Screen?, shape: MiniHudShape) {
         open(ConfirmScreen(
             { yes ->
-                // Checked again here: the screen it was started from may have been left open.
-                if (yes && ShapeStore.byId(shape.id) != null) {
-                    if (MiniHudShapes.create(shape, player.blockY)) {
-                        ShapeStore.remove(shape.id)
-                        say("${shape.name} is now a MiniHUD shape")
+                if (yes) {
+                    if (MiniHudShapes.delete(shape)) {
+                        ShapeStore.forgetMiniHud(shape.id)
+                        say("Deleted ${shape.name} from MiniHUD and the map")
                     } else {
-                        say("MiniHUD would not take that shape; the log says why.")
+                        say("MiniHUD would not delete ${shape.name}; the log says why.")
                     }
                 }
                 open(parent)
             },
-            Component.literal("Move ${shape.name} into MiniHUD?"),
+            Component.literal("Delete ${shape.name} from MiniHUD?"),
             Component.literal(
-                "It becomes an ordinary MiniHUD shape, shown in the world as well as on the map, and edited in MiniHUD from then on. " +
-                    "It is put at your height (${player.blockY}), and is taken off this mod's own map so it is not drawn twice."
+                "${shape.describeSize()}, ${Dimensions.name(shape.dimension)}. It goes from MiniHUD and the map. This cannot be undone." +
+                    if (shape.editable) "" else " It is in another dimension, so it is taken out of MiniHUD's file for it."
             ),
-            Component.literal("Move it"),
-            CommonComponents.GUI_CANCEL,
         ))
     }
 
@@ -179,9 +271,17 @@ object MapMenus {
     fun whyNotMoveToMiniHud(shape: Shape): String? = when {
         !MiniHudShapes.installed -> "MiniHUD is not installed."
         !Config.showMiniHud -> "MiniHUD shapes are switched off in the settings."
-        Dimensions.ofPlayer() != shape.dimension ->
-            "Go to the ${Dimensions.name(shape.dimension)} first: MiniHUD only holds shapes for the dimension you are in."
+        !MiniHudShapes.canReach(shape.dimension) -> "MiniHUD's files for the ${Dimensions.name(shape.dimension)} could not be found."
         else -> null
+    }
+
+    /**
+     * The height a shape is made at in MiniHUD: your feet in its dimension; elsewhere the height
+     * it was shared at, or sea level.
+     */
+    fun miniHudY(shape: Shape): Int {
+        val player = Minecraft.getInstance().player
+        return if (player != null && Dimensions.ofPlayer() == shape.dimension) player.blockY else shape.y ?: SEA_LEVEL
     }
 
     fun open(screen: Screen?) {
@@ -206,4 +306,5 @@ object MapMenus {
     }
 
     private const val MAX_UNDER_CLICK = 4
+    const val SEA_LEVEL = 64
 }
