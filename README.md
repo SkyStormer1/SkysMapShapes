@@ -32,7 +32,7 @@ beacon.
   them at once.
 - **Hover an outline** to see what it is, and right-click it to edit, hide or delete. Two shapes on
   top of each other are both offered.
-- **A shapes list**, from the **Shapes** button on the world map: search it, show or hide shapes,
+- **A shapes list**, opened from the settings or a key you set in Controls: search it, show or hide shapes,
   jump the map to one, edit or delete it. Hidden shapes stay listed, so they are easy to bring
   back. **Hide all** remembers which shapes it hid, and **Show all** brings back only those, so
   shapes you had hidden yourself stay hidden. Press **Show all** again to show every shape.
