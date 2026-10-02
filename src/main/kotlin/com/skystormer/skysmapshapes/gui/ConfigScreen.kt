@@ -11,7 +11,6 @@ import net.minecraft.client.gui.components.EditBox
 import net.minecraft.client.gui.components.StringWidget
 import net.minecraft.client.gui.components.Tooltip
 import net.minecraft.client.gui.screens.Screen
-import net.minecraft.network.chat.CommonComponents
 import net.minecraft.network.chat.Component
 import kotlin.math.roundToInt
 
@@ -22,7 +21,7 @@ import kotlin.math.roundToInt
  *
  * Built from plain vanilla widgets rather than a config library, like Sky's Map Exposer's.
  */
-class ConfigScreen(private val parent: Screen?) : Screen(Component.literal("Sky's Map Shapes")) {
+class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal("Sky's Map Shapes")) {
 
     private class PresetDraft(var name: String, var radius: String, var colour: Int)
 
@@ -43,13 +42,27 @@ class ConfigScreen(private val parent: Screen?) : Screen(Component.literal("Sky'
     private val nameBoxes = ArrayList<EditBox>()
     private val radiusBoxes = ArrayList<EditBox>()
 
-    override fun init() {
+    override val resetTip = "Puts the switches, thickness and fill back to how the mod comes. " +
+        "Your shapes and presets are kept; Vanilla presets resets those."
+
+    override fun resetToDefaults() {
+        keepEdits()
+        enabled = true
+        showPanel = true
+        showOnWorldMap = true
+        showOnMinimap = true
+        showLabels = true
+        showMiniHud = true
+        hideInMiniHud = true
+        miniHudIncludeDisabled = false
+        thicknessScale = 1f
+        fillOpacity = 0.15f
+    }
+
+    override fun content(top: Int) {
         val left = width / 2 - WIDTH / 2
         val third = (WIDTH - GAP * 2) / 3
-        var y = maxOf(4, (height - 274) / 2)
-
-        addRenderableWidget(StringWidget(left, y, WIDTH, font.lineHeight, title, font))
-        y += font.lineHeight + GAP * 2
+        var y = top
 
         // The switch for the whole mod, the panel, and the way to the shapes list, first.
         addRenderableWidget(toggle(left, y, third, "Mod", enabled,
@@ -123,10 +136,9 @@ class ConfigScreen(private val parent: Screen?) : Screen(Component.literal("Sky'
                 if (preset != null) draft.colour = preset.colour
             }
             rebuildWidgets()
-        }.bounds(left, y, third, ROW)
+        }.bounds(left, y, WIDTH, ROW)
             .tooltip(Tooltip.create(Component.literal("Back to vanilla's despawn distances: instant despawn beyond 128 blocks, no despawning within 32.")))
             .build())
-        addRenderableWidget(Button.builder(CommonComponents.GUI_DONE) { onClose() }.bounds(left + third + GAP, y, WIDTH - third - GAP, ROW).build())
     }
 
     /** A slider from 0 to 1, showing [text] of its value. */

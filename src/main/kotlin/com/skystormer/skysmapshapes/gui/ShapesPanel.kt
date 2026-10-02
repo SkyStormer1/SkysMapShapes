@@ -107,8 +107,7 @@ object ShapesPanel {
     private fun font() = Minecraft.getInstance().font
 
     private fun tooltip(graphics: GuiGraphicsExtractor, text: String, mouseX: Int, mouseY: Int) {
-        val font = font()
-        graphics.setTooltipForNextFrame(font, font.split(Component.literal(text), TOOLTIP_WIDTH), mouseX, maxOf(mouseY, 16))
+        DockPanel.tooltip(graphics, text, mouseX, mouseY, TOOLTIP_WIDTH)
     }
 
     private fun shortName(shape: MapShape): String {

@@ -968,7 +968,7 @@ object AddShapeWindow {
                 val shown = if (font.width(label) > width - 2) font.plainSubstrByWidth(label, width - 4) else label
                 graphics.text(font, shown, x + (width - font.width(shown)) / 2, y + (height - 8) / 2, if (!active) 0xFF606060.toInt() else if (on) WHITE else LABEL, false)
             }
-            if (hovered) tip()?.let { graphics.setTooltipForNextFrame(font, font.split(Component.literal(it), 180), screenMouseX, maxOf(screenMouseY, 16)) }
+            if (hovered) tip()?.let { DockPanel.tooltip(graphics, it, screenMouseX, screenMouseY, 180) }
         }
 
         override fun mouseClicked(event: MouseButtonEvent, doubleClick: Boolean): Boolean {
