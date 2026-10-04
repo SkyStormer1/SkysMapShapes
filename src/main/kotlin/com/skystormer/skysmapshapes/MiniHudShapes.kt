@@ -269,12 +269,27 @@ object MiniHudShapes {
     /** MiniHUD's file for [dimension] on this server, whether or not it exists yet. */
     private fun fileFor(dimension: String): Path? {
         val api = api ?: return null
-        val prefix = filePrefix(api) ?: return null
-        if (!Dimensions.isId(dimension)) return null
+        val prefix = filePrefix(api) ?: return unreachable("no file name prefix (MaLiLib gave none and the world has no key)")
+        if (!Dimensions.isId(dimension)) return unreachable("'$dimension' is not a usable dimension id")
         val folder = FabricLoader.getInstance().configDir.resolve("minihud").normalize()
-        val file = folder.resolve(prefix + dimension.replace(':', '_') + ".json").normalize()
+        val file = try {
+            folder.resolve(prefix + dimension.replace(':', '_') + ".json").normalize()
+        } catch (e: Exception) {
+            return unreachable("'$prefix' is not a usable file name: $e")
+        }
         // Never anywhere but MiniHUD's own folder, whatever the names it is built from.
-        return file.takeIf { it.parent == folder }
+        return file.takeIf { it.parent == folder } ?: unreachable("$file is outside $folder")
+    }
+
+    private var lastUnreachable: String? = null
+
+    /** Logs why MiniHUD's file could not be found, once per reason rather than every frame. */
+    private fun unreachable(why: String): Path? {
+        if (why != lastUnreachable) {
+            lastUnreachable = why
+            Log.warn("MiniHUD's file for another dimension could not be found: {}", why)
+        }
+        return null
     }
 
     private val GSON = GsonBuilder().setPrettyPrinting().create()
