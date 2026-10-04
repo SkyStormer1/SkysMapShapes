@@ -206,7 +206,7 @@ class ShapeEditScreen private constructor(
                         it.active = reachable
                         it.setTooltip(Tooltip.create(Component.literal(
                             when {
-                                !reachable -> "MiniHUD's files for the ${Dimensions.name(dimension)} could not be found."
+                                !reachable -> MiniHudShapes.whyUnreachable(dimension) ?: "MiniHUD cannot be reached."
                                 inThisDimension ->
                                     "MiniHUD: it becomes an ordinary MiniHUD shape, shown in the world as well as on the map, and edited in MiniHUD. " +
                                         "A flat shape needs a height, so it is put at your feet. Change it afterwards in MiniHUD's editor."

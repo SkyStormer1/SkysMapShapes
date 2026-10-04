@@ -271,8 +271,7 @@ object MapMenus {
     fun whyNotMoveToMiniHud(shape: Shape): String? = when {
         !MiniHudShapes.installed -> "MiniHUD is not installed."
         !Config.showMiniHud -> "MiniHUD shapes are switched off in the settings."
-        !MiniHudShapes.canReach(shape.dimension) -> "MiniHUD's files for the ${Dimensions.name(shape.dimension)} could not be found."
-        else -> null
+        else -> MiniHudShapes.whyUnreachable(shape.dimension)
     }
 
     /**

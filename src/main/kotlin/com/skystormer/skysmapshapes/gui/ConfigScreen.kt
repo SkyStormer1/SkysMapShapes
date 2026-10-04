@@ -85,8 +85,9 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         // MiniHUD's shapes: only when it is installed.
         val installed = MiniHudShapes.installed
         addRenderableWidget(toggle(left, y, third, "MiniHUD shapes", showMiniHud,
-            if (installed) "Show MiniHUD's shapes on the map as outlines, even with MiniHUD's own shape renderer off. Delete one in MiniHUD and it goes from the map too."
-            else "MiniHUD is not installed.") { showMiniHud = it }.also { it.active = installed })
+            MiniHudShapes.problem()?.takeIf { installed }?.let { "$it\n\n" }.orEmpty() +
+                if (installed) "Show MiniHUD's shapes on the map as outlines, even with MiniHUD's own shape renderer off. Delete one in MiniHUD and it goes from the map too."
+                else "MiniHUD is not installed.") { showMiniHud = it }.also { it.active = installed })
         addRenderableWidget(toggle(left + third + GAP, y, third, "Hide all: MiniHUD", hideInMiniHud,
             "On: Hide all and Show all in the Shapes list switch MiniHUD's shapes off and on in MiniHUD too, so they go from the world as well. Off: they only hide them on the map. One shape at a time, you choose each time.") { hideInMiniHud = it }.also { it.active = installed })
         addRenderableWidget(toggle(left + (third + GAP) * 2, y, third, "Ones off in MiniHUD", miniHudIncludeDisabled,

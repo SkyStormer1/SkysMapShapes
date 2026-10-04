@@ -50,6 +50,9 @@ object MiniHudShapes {
 
     private var ticks = 0
     private var broken = false
+
+    /** Why MiniHUD could not be read or used, in a few words for a tooltip; null while it works. */
+    private var failure: String? = null
     private val fileCache = HashMap<Path, Pair<Long, List<MiniHudShape>>>()
 
     private class Api(
@@ -77,9 +80,28 @@ object MiniHudShapes {
                 shapeClass = shapeClass,
             ).also { Log.info("MiniHUD found: its shapes will be shown on the map") }
         } catch (e: Throwable) {
+            failure = "this MiniHUD or MaLiLib version could not be read (${missingPart(e)})"
             Log.error("This version of MiniHUD could not be read; its shapes will not be shown", e)
             null
         }
+    }
+
+    /** The class or method a version of MiniHUD or MaLiLib lacked, or else what went wrong. */
+    private fun missingPart(e: Throwable): String = when (e) {
+        is ClassNotFoundException -> "no ${e.message?.substringAfterLast('.')}"
+        is NoSuchMethodException -> "no ${e.message?.substringAfterLast('.')?.substringBefore('(')}"
+        is NoSuchFieldException -> "no ${e.message}"
+        else -> e.javaClass.simpleName
+    }
+
+    /**
+     * Why MiniHUD's shapes cannot be shown or made at all, for a tooltip: not installed, a version
+     * that could not be read, or reading it failed. Null while it works.
+     */
+    fun problem(): String? = when {
+        !installed -> "MiniHUD is not installed."
+        api == null || failure != null -> "MiniHUD is installed, but ${failure ?: "it could not be read"}. The log says more."
+        else -> null
     }
 
     /** Called every client tick; reads MiniHUD twice a second. */
@@ -100,6 +122,7 @@ object MiniHudShapes {
             all = live + otherDimensions(api, here)
         } catch (e: Throwable) {
             broken = true
+            failure = "its shapes could not be read (${e.javaClass.simpleName}) until the game restarts"
             all = emptyList()
             Log.error("Could not read MiniHUD's shapes; they will not be shown until the game restarts", e)
         }
@@ -231,7 +254,8 @@ object MiniHudShapes {
         MiniHudGeometry.whyTooBig(shape, typeId?.let { MiniHudGeometry.formOfType(it) } ?: form)?.let { return it }
         val here = Dimensions.ofPlayer() == shape.dimension
         val file = if (here) null else fileFor(shape.dimension)
-            ?: return "MiniHUD's files for this world could not be found, so it stays on this mod's map."
+            ?: return (whyUnreachable(shape.dimension) ?: "MiniHUD's file for the ${Dimensions.name(shape.dimension)} could not be found.") +
+                " It stays on this mod's map."
         return try {
             val json = MiniHudGeometry.toMiniHudJson(shape, y, form) ?: return "MiniHUD has no shape like that."
             // A shared MiniHUD shape is made again as the kind it was, when that kind fits these fields.
@@ -263,16 +287,37 @@ object MiniHudShapes {
     }
 
     /** Whether shapes can be made in MiniHUD for [dimension]: live where you are, else through its file. */
-    fun canReach(dimension: String): Boolean =
-        installed && api != null && (Dimensions.ofPlayer() == dimension || fileFor(dimension) != null)
+    fun canReach(dimension: String): Boolean = whyUnreachable(dimension) == null
+
+    /** Why shapes cannot be made in MiniHUD for [dimension], for a tooltip; null when they can. */
+    fun whyUnreachable(dimension: String): String? {
+        problem()?.let { return it }
+        if (Dimensions.ofPlayer() == dimension) return null
+        val name = Dimensions.name(dimension)
+        val api = api ?: return "MiniHUD could not be read."
+        val prefix = filePrefix(api)
+            ?: return "MiniHUD's file for the $name could not be found: this world or server has no name to find it by. Go to the $name and try there."
+        return when (fileAt(prefix, dimension)) {
+            null -> "MiniHUD's file for the $name could not be found: '$prefix' and '$dimension' do not make a usable file name. Go to the $name and try there."
+            else -> null
+        }
+    }
 
     /** MiniHUD's file for [dimension] on this server, whether or not it exists yet. */
     private fun fileFor(dimension: String): Path? {
         val api = api ?: return null
         val prefix = filePrefix(api) ?: return null
+        return fileAt(prefix, dimension)
+    }
+
+    private fun fileAt(prefix: String, dimension: String): Path? {
         if (!Dimensions.isId(dimension)) return null
         val folder = FabricLoader.getInstance().configDir.resolve("minihud").normalize()
-        val file = folder.resolve(prefix + dimension.replace(':', '_') + ".json").normalize()
+        val file = try {
+            folder.resolve(prefix + dimension.replace(':', '_') + ".json").normalize()
+        } catch (e: Exception) {
+            return null
+        }
         // Never anywhere but MiniHUD's own folder, whatever the names it is built from.
         return file.takeIf { it.parent == folder }
     }
