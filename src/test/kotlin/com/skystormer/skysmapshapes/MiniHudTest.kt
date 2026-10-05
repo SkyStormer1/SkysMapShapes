@@ -130,6 +130,19 @@ class MiniHudTest {
         assertEquals(-17.5, box.getAsJsonArray("corner2")[2].asDouble) // -19.5 + 4/2
     }
 
+    /** MiniHUD stands a prism up from its centre block, so one made at a height starts half its height below it. */
+    @Test
+    fun aPrismMadeInMiniHudIsCentredOnItsHeight() {
+        val ours = Shape(label = "Farm", dimension = "d", type = Shape.Type.SQUARE, x = 0, z = 0, radius = 16.0, colour = Colours.RED.argb)
+        val json = MiniHudGeometry.toMiniHudJson(ours, 70)!!
+        assertEquals(70.0 - MiniHudShapes.PRISM_HEIGHT / 2, json.getAsJsonArray("center")[1].asDouble)
+        assertEquals(70, MiniHudGeometry.heightOf(json))
+        val volume = MiniHudGeometry.volumeOf("square", json)!!
+        assertTrue(volume.contains(0, 70 - MiniHudShapes.PRISM_HEIGHT / 2, 0))
+        assertTrue(volume.contains(0, 70 + MiniHudShapes.PRISM_HEIGHT / 2 - 1, 0))
+        assertFalse(volume.contains(0, 70 + MiniHudShapes.PRISM_HEIGHT / 2, 0))
+    }
+
     /** What is made in MiniHUD reads back as the same outline on the map. */
     @Test
     fun aShapeMadeInMiniHudComesBackTheSameSize() {

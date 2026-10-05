@@ -48,6 +48,68 @@ internal object MiniHudGeometry {
         return along(axis, cx, cz, radius, radius, height)
     }
 
+    /**
+     * The space a shape takes up in the world, from the same JSON; null for one with no inside,
+     * such as a line. Sizes are read as MiniHUD reads them: a spawn sphere's margin adds to its
+     * radius, prisms and pyramids stand [height] blocks from their centre block along their axis,
+     * and a centre snapped to a block is moved to that block's middle (or corner).
+     */
+    fun volumeOf(type: String, json: JsonObject): Volume? {
+        vec(json, "corner1")?.let { a ->
+            val b = vec(json, "corner2") ?: return null
+            return Volume.Box(minOf(a[0], b[0]), minOf(a[1], b[1]), minOf(a[2], b[2]), maxOf(a[0], b[0]), maxOf(a[1], b[1]), maxOf(a[2], b[2]))
+        }
+        if (json.has("origin_x")) {
+            val origin = doubleArrayOf(json.get("origin_x").asDouble, json.get("origin_y")?.asDouble ?: return null, json.get("origin_z")?.asDouble ?: return null)
+            val section = when (type) {
+                "pyramid" -> Volume.Section.SQUARE
+                "diamond_pyramid" -> Volume.Section.RHOMBUS
+                "octagon_pyramid" -> Volume.Section.OCTAGON
+                else -> Volume.Section.CIRCLE
+            }
+            return standing(json.get("direction")?.asString ?: "UP", origin.map { Math.floor(it) + 0.5 }.toDoubleArray(), section,
+                json.get("bottom_radius")?.asDouble ?: 0.0, json.get("top_radius")?.asDouble ?: 0.0, json.get("height")?.asInt ?: 1)
+        }
+        val centre = vec(json, "center")?.let { snapped(it, json.get("snap")?.asString) } ?: return null
+        val radius = json.get("radius")?.asDouble ?: return null
+        if (type == "ellipsoid_spawn") {
+            return Volume.Ellipsoid(centre[0], centre[1], centre[2], radius, json.get("radius_y")?.asDouble ?: radius, json.get("radius_z")?.asDouble ?: radius)
+        }
+        if (type in SPHERES) return Volume.Ellipsoid(centre[0], centre[1], centre[2], radius + (json.get("margin")?.asDouble ?: 0.0))
+        val section = when (type) {
+            "square" -> Volume.Section.SQUARE
+            "rhombus" -> Volume.Section.RHOMBUS
+            "circle" -> Volume.Section.CIRCLE
+            else -> return null
+        }
+        return standing(json.get("main_axis")?.asString ?: "UP", centre, section, radius, radius, json.get("height")?.asInt ?: 1)
+    }
+
+    /** A cross-section stood [height] blocks along [direction] from the block holding [centre]. */
+    private fun standing(direction: String, centre: DoubleArray, section: Volume.Section, startRadius: Double, endRadius: Double, height: Int): Volume {
+        val (axis, step) = when (direction) {
+            "DOWN" -> Volume.Axis.Y to -1
+            "NORTH" -> Volume.Axis.Z to -1
+            "SOUTH" -> Volume.Axis.Z to 1
+            "WEST" -> Volume.Axis.X to -1
+            "EAST" -> Volume.Axis.X to 1
+            else -> Volume.Axis.Y to 1
+        }
+        val (along, u, v) = when (axis) {
+            Volume.Axis.X -> Triple(centre[0], centre[1], centre[2])
+            Volume.Axis.Y -> Triple(centre[1], centre[0], centre[2])
+            Volume.Axis.Z -> Triple(centre[2], centre[0], centre[1])
+        }
+        return Volume.Extruded(axis, Math.floor(along).toInt(), step, maxOf(1, height), u, v, section, startRadius, endRadius)
+    }
+
+    /** [centre] moved as MiniHUD's block snap moves it: to the middle or the corner of its block. */
+    private fun snapped(centre: DoubleArray, snap: String?): DoubleArray = when (snap) {
+        "center" -> DoubleArray(3) { Math.floor(centre[it]) + 0.5 }
+        "corner" -> DoubleArray(3) { Math.floor(centre[it]) }
+        else -> centre
+    }
+
     /** Cones and pyramids: an upright one is its wider end's outline; one lying down, a trapezoid. */
     private fun tapered(type: String, json: JsonObject): Geometry? {
         val cx = json.get("origin_x")?.asDouble ?: return null
@@ -246,6 +308,8 @@ internal object MiniHudGeometry {
         json.addProperty("color_lines", shape.colour)
         json.addProperty("render_type", "outer_edge")
         val centre = JsonArray().apply { add(b.centreX); add(y.toDouble()); add(b.centreZ) }
+        // MiniHUD stands a prism up from its centre block, so it starts half its height lower.
+        val prismBase = JsonArray().apply { add(b.centreX); add((y - MiniHudShapes.PRISM_HEIGHT / 2).toDouble()); add(b.centreZ) }
         val forms = forms(shape.type)
         val chosen = form?.takeIf { it in forms } ?: forms.first()
 
@@ -280,14 +344,15 @@ internal object MiniHudGeometry {
         }
         when (shape.type) {
             Shape.Type.CIRCLE -> {
-                json.add("center", centre)
                 json.addProperty("radius", shape.radius)
                 liftLimit("max_radius", shape.radius, DEFAULT_MAX_RADIUS)
                 json.addProperty("main_axis", "UP")
                 if (chosen == Form.SPHERE) {
                     json.addProperty("type", "sphere_blocky")
+                    json.add("center", centre)
                 } else {
                     json.addProperty("type", "circle")
+                    json.add("center", prismBase)
                     json.addProperty("height", MiniHudShapes.PRISM_HEIGHT)
                 }
             }
@@ -303,7 +368,7 @@ internal object MiniHudGeometry {
             }
             Shape.Type.SQUARE, Shape.Type.RHOMBUS -> {
                 json.addProperty("type", if (shape.type == Shape.Type.SQUARE) "square" else "rhombus")
-                json.add("center", centre)
+                json.add("center", prismBase)
                 json.addProperty("radius", shape.radius)
                 liftLimit("max_radius", shape.radius, DEFAULT_MAX_RADIUS)
                 json.addProperty("main_axis", "UP")
@@ -347,7 +412,15 @@ internal object MiniHudGeometry {
 
     /** The height at the middle of a shape, from whichever fields its kind uses. */
     fun heightOf(json: JsonObject): Int? {
-        vec(json, "center")?.let { return Math.floor(it[1]).toInt() }
+        vec(json, "center")?.let { centre ->
+            val base = Math.floor(centre[1]).toInt()
+            val height = json.get("height")?.asInt ?: return base
+            return when (json.get("main_axis")?.asString) {
+                "UP" -> base + height / 2
+                "DOWN" -> base - height / 2
+                else -> base
+            }
+        }
         val corner1 = vec(json, "corner1")
         val corner2 = vec(json, "corner2")
         if (corner1 != null && corner2 != null) return Math.floor((corner1[1] + corner2[1]) / 2).toInt()

@@ -2,11 +2,12 @@ package com.skystormer.skysmapshapes
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.skystormer.skysmapshapes.gui.ShapeEditScreen
+import java.util.Base64
 import net.minecraft.client.Minecraft
 import net.minecraft.network.chat.ClickEvent
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.HoverEvent
-import java.util.Base64
 
 /**
  * Sharing a shape in chat, the way Xaero shares a waypoint and Sky's Structure Map shares a
@@ -316,7 +317,7 @@ object ShapeShare {
         val minecraft = Minecraft.getInstance()
         val shared = decode(code) ?: return MapMenus.say("That shape code could not be read.")
         if (!ShapeStore.isOpen) return MapMenus.say("Join a world first.")
-        minecraft.gui.setScreen(com.skystormer.skysmapshapes.gui.ShapeEditScreen.forShared(minecraft.gui.screen(), shared))
+        minecraft.gui.setScreen(ShapeEditScreen.forShared(minecraft.gui.screen(), shared))
     }
 
     /** The client-side command the add button runs. */

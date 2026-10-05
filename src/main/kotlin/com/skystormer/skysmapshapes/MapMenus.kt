@@ -1,8 +1,8 @@
 package com.skystormer.skysmapshapes
 
 import com.skystormer.skysmapshapes.gui.AddShapeWindow
-import com.skystormer.skysmapshapes.gui.ShapeEditScreen
 import com.skystormer.skysmapshapes.gui.MoveToMiniHudScreen
+import com.skystormer.skysmapshapes.gui.ShapeEditScreen
 import com.skystormer.skysmapshapes.gui.ShareScreen
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.ConfirmScreen
@@ -32,7 +32,7 @@ object MapMenus {
             if (!ShapeStore.isOpen) return@guard Log.warn("Map right-click: no shapes file open (not in a world?)")
             options.add(option("Add shape here", options.size, target) { parent -> add(parent, dim, x, z, "") })
             // Every shape under the click can be edited from here, even one whose label is off screen.
-            val under = ShapeStore.inDimension(dim).filter { it.contains(x, z) }
+            val under = ShapeStore.inDimension(dim).filter { it.visible && it.contains(x, z) }
             for (shape in under.take(MAX_UNDER_CLICK)) {
                 options.add(option("Edit shape: ${shape.name}", options.size, target) { parent -> edit(parent, shape) })
             }
@@ -125,6 +125,7 @@ object MapMenus {
                     else say("MiniHUD would not switch ${shape.name} on; the log says why.")
                 }.setActive(shape.changeable))
             }
+            if (shape.volume != null) addLightOption(options, target, shape, "It only counts while it is on in MiniHUD.")
             if (ShapeShare.asShape(shape) != null) {
                 options.add(option("Share in chat…", options.size, target) { parent -> confirmShare(parent, shape) })
             }
@@ -146,9 +147,10 @@ object MapMenus {
                 say("Showing ${shape.name}.")
             })
         }
+        addLightOption(options, target, shape, "It counts at every height inside its outline, while it is shown on the map.")
         options.add(option("Share in chat…", options.size, target) { parent -> confirmShare(parent, shape) })
         if (MiniHudShapes.installed && Config.showMiniHud) {
-            // Greyed out from another dimension, and the line itself says why on hover.
+            // Greyed out when MiniHUD cannot take it, and the line itself says why on hover.
             val why = whyNotMoveToMiniHud(shape)
             options.add(option(
                 "Move into MiniHUD…", options.size, target,
@@ -160,22 +162,36 @@ object MapMenus {
     }
 
     /**
+     * What [shape] does to MiniHUD's light levels, when they are kept to inside shapes: each
+     * click moves it on to the next of show, none and ignore. [counts] says when it counts.
+     */
+    private fun addLightOption(options: ArrayList<RightClickOption>, target: IRightClickableElement, shape: MapShape, counts: String) {
+        if (!LightLevels.active) return
+        val role = ShapeStore.lightRole(shape.id)
+        options.add(option("Light levels: ${role.title}", options.size, target,
+            tip = "${role.tip} $counts\nClick for: ${role.next.title}.") { _ ->
+            ShapeStore.setLightRole(shape.id, role.next)
+            say("Light levels in ${shape.name}: ${role.next.title}. ${role.next.tip}")
+        })
+    }
+
+    /**
      * A new shape at block ([x], [z]), at height [y] when it is known (a waypoint's): on the world map, in the window beside the Shapes panel with
      * the shape drawn live; anywhere else, on the full add screen.
      */
     fun add(parent: Screen?, dimension: String, x: Int, z: Int, label: String, y: Int? = null) {
-        if (isWorldMap(parent)) AddShapeWindow.openNew(parent!!, dimension, x, z, label, y)
+        if (parent != null && isWorldMap(parent)) AddShapeWindow.openNew(parent, dimension, x, z, label, y)
         else open(ShapeEditScreen.forNew(parent, dimension, x, z, label, y))
     }
 
     /** Editing one of this mod's shapes, the same way round as [add]. */
     fun edit(parent: Screen?, shape: Shape) {
         val current = ShapeStore.byId(shape.id) ?: return
-        if (isWorldMap(parent) && Dimensions.ofMap() == current.dimension) AddShapeWindow.openExisting(parent!!, current)
+        if (parent != null && isWorldMap(parent) && Dimensions.ofMap() == current.dimension) AddShapeWindow.openExisting(parent, current)
         else open(ShapeEditScreen.forExisting(parent, current))
     }
 
-    private fun isWorldMap(screen: Screen?) = screen?.javaClass?.name == "xaero.map.gui.GuiMap"
+    private fun isWorldMap(screen: Screen) = screen.javaClass.name == "xaero.map.gui.GuiMap"
 
     /** Asks who to share with first: everyone, or one player privately. */
     fun confirmShare(parent: Screen?, shape: MapShape) {

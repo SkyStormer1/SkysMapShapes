@@ -42,6 +42,12 @@ object Config {
      */
     var hideInMiniHud = true
 
+    /**
+     * Whether MiniHUD's light level overlay only shows inside shapes, each shape's own light
+     * setting deciding how it counts (see [LightLevels]).
+     */
+    var lightInsideShapes = false
+
     /** Whether shapes shared in chat by other players are offered as a clickable add button. */
     var shareInChat = true
 
@@ -62,11 +68,16 @@ object Config {
     /** How many lines the panel shows before scrolling. Changed by dragging its bottom edge. */
     var panelRows = 8
 
-    /** The panel's size (1 = the game's own), the width added by dragging its right edge, and the panel it is docked under ("" for none). */
+    /** The panel's size: 1 is the game's own. */
     var panelScale = 1f
+
     /** The panel's width when its place was saved, so it reads back to the same spot. */
     var panelWidth = 0
+
+    /** Width added by dragging the panel's right edge. */
     var panelExtra = 0
+
+    /** The panel it is docked under, or "" for none. */
     var panelUnder = ""
 
     /**
@@ -125,6 +136,7 @@ object Config {
             showMiniHud = json.get("showMiniHud")?.asBoolean ?: showMiniHud
             miniHudIncludeDisabled = json.get("miniHudIncludeDisabled")?.asBoolean ?: miniHudIncludeDisabled
             hideInMiniHud = json.get("hideInMiniHud")?.asBoolean ?: hideInMiniHud
+            lightInsideShapes = json.get("lightInsideShapes")?.asBoolean ?: lightInsideShapes
             shareInChat = json.get("shareInChat")?.asBoolean ?: shareInChat
             privateShareCommand = json.get("privateShareCommand")?.asString?.trim()?.removePrefix("/")
                 ?.takeIf { it.isNotEmpty() } ?: privateShareCommand
@@ -170,6 +182,7 @@ object Config {
             json.addProperty("showMiniHud", showMiniHud)
             json.addProperty("miniHudIncludeDisabled", miniHudIncludeDisabled)
             json.addProperty("hideInMiniHud", hideInMiniHud)
+            json.addProperty("lightInsideShapes", lightInsideShapes)
             json.addProperty("shareInChat", shareInChat)
             json.addProperty("privateShareCommand", privateShareCommand)
             json.addProperty("showPanel", showPanel)

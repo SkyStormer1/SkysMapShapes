@@ -29,7 +29,7 @@ import xaero.map.gui.dropdown.rightclick.RightClickOption;
 import java.util.ArrayList;
 
 /**
- * Two things on Xaero's world map screen.
+ * What this mod adds to Xaero's world map screen.
  *
  * Drawing: straight after Xaero has drawn its terrain (the second flush of its terrain renderers,
  * the one without baked light), shapes go into Xaero's colour overlay buffer, which Xaero draws on
@@ -42,7 +42,7 @@ import java.util.ArrayList;
  * Right-click menu: "Add shape here", plus "Edit" for any shape under the click, at the end of the
  * menu Xaero shows when you right-click the map itself.
  *
- * Locals are taken by name, which Xaero's jar keeps. Neither injection is required, so an
+ * Locals are taken by name, which Xaero's jar keeps. None of the injections is required, so an
  * unsupported Xaero version costs the shapes, not the game.
  */
 @Mixin(targets = "xaero.map.gui.GuiMap", remap = false)

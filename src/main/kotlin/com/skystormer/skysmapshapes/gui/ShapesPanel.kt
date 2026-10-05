@@ -1,5 +1,6 @@
 package com.skystormer.skysmapshapes.gui
 
+import com.mojang.blaze3d.platform.InputConstants
 import com.skystormer.skysmapshapes.Config
 import com.skystormer.skysmapshapes.Dimensions
 import com.skystormer.skysmapshapes.Log
@@ -17,7 +18,6 @@ import net.fabricmc.fabric.api.client.screen.v1.Screens
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.screens.Screen
-import net.minecraft.network.chat.Component
 import xaero.map.gui.IRightClickableElement
 import xaero.map.gui.dropdown.rightclick.RightClickOption
 
@@ -55,7 +55,6 @@ object ShapesPanel {
 
     private const val MENU_ROW = 12
     private const val MENU_PAD = 4
-    private const val ESCAPE = 256
 
     private var popup: Popup? = null
 
@@ -85,14 +84,14 @@ object ShapesPanel {
             true
         }
         ScreenKeyboardEvents.allowKeyPress(screen).register { _, event ->
-            if (popup != null && event.key() == ESCAPE) {
+            if (popup != null && event.key() == InputConstants.KEY_ESCAPE) {
                 popup = null
                 false
             } else true
         }
         // Drawn after everything else on the screen, so no panel or map element covers it.
-        ScreenEvents.afterExtract(screen).register { s, graphics, mouseX, mouseY, _ ->
-            popup?.draw(s, graphics, mouseX, mouseY)
+        ScreenEvents.afterExtract(screen).register { _, graphics, mouseX, mouseY, _ ->
+            popup?.draw(graphics, mouseX, mouseY)
         }
         ScreenEvents.remove(screen).register { popup = null }
     }
@@ -321,7 +320,7 @@ object ShapesPanel {
             return ((mouseY - top - MENU_ROW) / MENU_ROW).toInt().takeIf { it in options.indices }
         }
 
-        fun draw(screen: Screen, graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int) {
+        fun draw(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int) {
             val font = font()
             graphics.fill(left - 1, top - 1, left + width + 1, top + height + 1, 0xFF3A1A6A.toInt())
             graphics.fill(left, top, left + width, top + height, 0xF00A0A0C.toInt())
@@ -334,7 +333,7 @@ object ShapesPanel {
                 graphics.text(font, option.displayName, left + MENU_PAD, y + 2, if (option.isActive) WHITE else 0xFF707070.toInt(), false)
             }
             val tip = hovered?.let { (options[it] as? MenuTips.TipOption)?.tip }
-            if (tip != null) graphics.setComponentTooltipForNextFrame(font, tip.split('\n').map { Component.literal(it) }, mouseX, mouseY)
+            if (tip != null) tooltip(graphics, tip, mouseX, mouseY)
         }
 
         /** Runs the line clicked, if it can be; any click closes the menu. */

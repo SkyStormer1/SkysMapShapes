@@ -1,9 +1,9 @@
 package com.skystormer.skysmapshapes
 
+import com.skystormer.skysmapshapes.gui.DockPanel
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.screens.Screen
-import net.minecraft.network.chat.Component
 import xaero.lib.client.gui.widget.dropdown.DropDownWidget
 import xaero.map.gui.IRightClickableElement
 import xaero.map.gui.dropdown.rightclick.GuiRightClickMenu
@@ -42,12 +42,8 @@ object MenuTips {
             val options = optionsOf(menu) ?: return
             val line = hoveredLine(menu, mouseX, mouseY) ?: return
             val tip = (options.getOrNull(line) as? TipOption)?.tip ?: return
-            graphics.setComponentTooltipForNextFrame(
-                Minecraft.getInstance().font,
-                tip.split('\n').map { Component.literal(it) },
-                mouseX,
-                mouseY,
-            )
+            // Wrapped and kept on screen, which vanilla's tooltip is not at a big GUI scale.
+            DockPanel.tooltip(graphics, tip, mouseX, mouseY)
         } catch (e: Throwable) {
             broken = true
             Log.error("Could not put hover text on Xaero's right-click menu", e)
@@ -57,7 +53,7 @@ object MenuTips {
     /** The menu's own lines, in the order it draws them. */
     @Suppress("UNCHECKED_CAST")
     private fun optionsOf(menu: GuiRightClickMenu): List<RightClickOption>? =
-        (actionOptions.get(menu) as? List<RightClickOption>)
+        (hooks.actionOptions.get(menu) as? List<RightClickOption>)
 
     /**
      * Which line the mouse is on, from Xaero's own reckoning, so that scrolling and any change to
@@ -65,30 +61,35 @@ object MenuTips {
      */
     private fun hoveredLine(menu: GuiRightClickMenu, mouseX: Int, mouseY: Int): Int? {
         val height = Minecraft.getInstance().gui.screen()?.height ?: return null
-        val limit = optionLimit.invoke(menu, height) as Int
-        val scrolling = scrolling.invoke(menu, limit) as Boolean
-        val line = getHoveredId.invoke(menu, mouseX, mouseY, scrolling, limit) as Int
+        val limit = hooks.optionLimit.invoke(menu, height) as Int
+        val scrolling = hooks.scrolling.invoke(menu, limit) as Boolean
+        val line = hooks.getHoveredId.invoke(menu, mouseX, mouseY, scrolling, limit) as Int
         return line.takeIf { it >= 0 }
     }
 
-    private val dropDown: Class<*> = DropDownWidget::class.java
+    /** Xaero's menu internals, looked up on first use, inside [draw]'s guard, so a missing one is caught there. */
+    private class Hooks {
+        private val dropDown: Class<*> = DropDownWidget::class.java
 
-    private val actionOptions: Field =
-        GuiRightClickMenu::class.java.getDeclaredField("actionOptions").apply { isAccessible = true }
+        val actionOptions: Field =
+            GuiRightClickMenu::class.java.getDeclaredField("actionOptions").apply { isAccessible = true }
 
-    private val optionLimit: Method =
-        dropDown.getDeclaredMethod("optionLimit", Int::class.javaPrimitiveType).apply { isAccessible = true }
+        val optionLimit: Method =
+            dropDown.getDeclaredMethod("optionLimit", Int::class.javaPrimitiveType).apply { isAccessible = true }
 
-    private val scrolling: Method =
-        dropDown.getDeclaredMethod("scrolling", Int::class.javaPrimitiveType).apply { isAccessible = true }
+        val scrolling: Method =
+            dropDown.getDeclaredMethod("scrolling", Int::class.javaPrimitiveType).apply { isAccessible = true }
 
-    private val getHoveredId: Method = dropDown.getDeclaredMethod(
-        "getHoveredId",
-        Int::class.javaPrimitiveType,
-        Int::class.javaPrimitiveType,
-        Boolean::class.javaPrimitiveType,
-        Int::class.javaPrimitiveType,
-    ).apply { isAccessible = true }
+        val getHoveredId: Method = dropDown.getDeclaredMethod(
+            "getHoveredId",
+            Int::class.javaPrimitiveType,
+            Int::class.javaPrimitiveType,
+            Boolean::class.javaPrimitiveType,
+            Int::class.javaPrimitiveType,
+        ).apply { isAccessible = true }
+    }
+
+    private val hooks: Hooks by lazy { Hooks() }
 
     private var broken = false
 }

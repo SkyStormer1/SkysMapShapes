@@ -2,7 +2,7 @@ package com.skystormer.skysmapshapes
 
 import org.slf4j.LoggerFactory
 
-/** What the mod writes to the log: only things that went wrong. */
+/** What the mod writes to the log, every line marked as its own. */
 object Log {
 
     private val LOGGER = LoggerFactory.getLogger("skysmapshapes")

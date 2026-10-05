@@ -1,5 +1,7 @@
 package com.skystormer.skysmapshapes
 
+import java.nio.file.Path
+
 /** A shape read from MiniHUD: shown, hidden or jumped to here, but edited only in MiniHUD. */
 class MiniHudShape(
     override val id: String,
@@ -15,7 +17,9 @@ class MiniHudShape(
     /** MiniHUD's own shape object, for shapes in the dimension you are in; null for ones read from a file. */
     val handle: Any? = null,
     /** MiniHUD's file it was read from, for shapes in other dimensions; null for live ones. */
-    val file: java.nio.file.Path? = null,
+    val file: Path? = null,
+    /** The space it takes up in the world; null for one with no inside, such as a line. */
+    val volume: Volume? = null,
 ) : MapShape {
     /** Whether MiniHUD's editor can be opened on it from here: only in the dimension you are in. */
     val editable: Boolean get() = handle != null

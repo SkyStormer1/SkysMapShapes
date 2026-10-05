@@ -1,5 +1,6 @@
 package com.skystormer.skysmapshapes
 
+import com.skystormer.skysmapshapes.gui.MiniHudVisibilityScreen
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.screens.Screen
@@ -85,7 +86,7 @@ object ShapeHover {
                         options.add(MapMenus.option("Edit in MiniHUD: $name", options.size, this) { parent -> MiniHudShapes.openEditor(shape, parent) }
                             .setActive(shape.editable))
                         options.add(MapMenus.option("Show or hide: $name…", options.size, this) { parent ->
-                            MapMenus.open(com.skystormer.skysmapshapes.gui.MiniHudVisibilityScreen(parent, shape))
+                            MapMenus.open(MiniHudVisibilityScreen(parent, shape))
                         })
                         options.add(MapMenus.option("Delete: $name", options.size, this) { parent -> MapMenus.confirmDelete(parent, shape) }
                             .setActive(shape.changeable))

@@ -80,6 +80,11 @@ MiniHUD is optional. When it is installed, this mod and MiniHUD work as one:
   dimensions too, and shared MiniHUD shapes can be added to them. Those changes go into MiniHUD's
   saved file for that dimension, which MiniHUD loads when you go there. Only MiniHUD's Shape
   Editor needs you to be in the shape's dimension.
+- **Light levels only where you want them.** Turn on **MiniHUD light levels only in shapes** and
+  MiniHUD's light level overlay only shows inside your shapes. Right-click a shape to choose how it
+  counts: **show** (the default), **none** (dark inside, even within another shape, handy for a
+  build you will dig out) or **ignore**. MiniHUD's shapes count at their real size and height while
+  they are on in MiniHUD; this mod's own count at every height inside their outline.
 - **Share MiniHUD shapes too.** The shared shape carries MiniHUD's own kind of shape and the height
   it sits at: someone with MiniHUD gets the same shape in their world, and someone without it still
   gets the outline on their map.

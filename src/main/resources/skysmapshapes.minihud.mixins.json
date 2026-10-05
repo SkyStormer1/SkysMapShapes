@@ -1,0 +1,12 @@
+{
+  "required": false,
+  "package": "com.skystormer.skysmapshapes.mixin.minihud",
+  "plugin": "com.skystormer.skysmapshapes.mixin.minihud.MiniHudMixinPlugin",
+  "compatibilityLevel": "JAVA_${java_version}",
+  "client": [
+    "OverlayRendererLightLevelMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

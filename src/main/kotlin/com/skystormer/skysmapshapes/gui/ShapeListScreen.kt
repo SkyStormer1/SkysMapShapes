@@ -2,13 +2,13 @@ package com.skystormer.skysmapshapes.gui
 
 import com.skystormer.skysmapshapes.Config
 import com.skystormer.skysmapshapes.Dimensions
+import com.skystormer.skysmapshapes.Log
+import com.skystormer.skysmapshapes.MapCamera
+import com.skystormer.skysmapshapes.MapMenus
 import com.skystormer.skysmapshapes.MapShape
 import com.skystormer.skysmapshapes.MapShapes
 import com.skystormer.skysmapshapes.MiniHudShape
 import com.skystormer.skysmapshapes.MiniHudShapes
-import com.skystormer.skysmapshapes.Log
-import com.skystormer.skysmapshapes.MapCamera
-import com.skystormer.skysmapshapes.MapMenus
 import com.skystormer.skysmapshapes.Shape
 import com.skystormer.skysmapshapes.ShapeStore
 import net.minecraft.client.gui.GuiGraphicsExtractor
@@ -30,8 +30,7 @@ import kotlin.math.hypot
  * show or hide each (hidden ones stay listed, greyed, so they are easy to bring back), jump the
  * world map to one, edit or delete it. MiniHUD's can be deleted from here in any dimension.
  *
- * Opened from the settings or a key
- * you can bind in Controls. The mouse wheel turns the pages.
+ * Opened from the settings or a key you can bind in Controls. The mouse wheel turns the pages.
  */
 class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("Shapes")) {
 

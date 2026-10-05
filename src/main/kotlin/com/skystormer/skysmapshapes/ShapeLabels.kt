@@ -5,6 +5,7 @@ import net.minecraft.client.gui.screens.Screen
 import net.minecraft.network.chat.Component
 import xaero.lib.client.graphics.XaeroBufferProvider
 import xaero.lib.client.gui.widget.Tooltip
+import xaero.map.WorldMap
 import xaero.map.element.MapElementGraphics
 import xaero.map.element.render.ElementReader
 import xaero.map.element.render.ElementRenderInfo
@@ -161,7 +162,7 @@ object ShapeLabels {
 
     /** Registers with Xaero's world map, once it has started. */
     fun register(): Boolean {
-        val handler = xaero.map.WorldMap.mapElementRenderHandler ?: return false
+        val handler = WorldMap.mapElementRenderHandler ?: return false
         handler.add(Renderer(Context(), Provider(), Reader()))
         return true
     }

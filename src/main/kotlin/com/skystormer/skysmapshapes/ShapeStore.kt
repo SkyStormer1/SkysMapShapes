@@ -8,6 +8,8 @@ import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.client.Minecraft
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.util.UUID
 
 /**
  * The shapes for the server or single-player world you are in: one file per server in
@@ -54,6 +56,13 @@ object ShapeStore {
     var hiddenByHideAll: Map<String, Set<String>> = emptyMap()
         private set
 
+    /**
+     * What each shape does to MiniHUD's light levels, by id, for shapes not left at
+     * [LightLevels.Role.SHOW]. Read on the render thread, so replaced whole.
+     */
+    @Volatile
+    private var lightRoles: Map<String, LightLevels.Role> = emptyMap()
+
     val isOpen: Boolean get() = file != null
 
     fun open(minecraft: Minecraft) {
@@ -65,10 +74,11 @@ object ShapeStore {
         val (name, key) = world
         worldName = name
         worldKey = key
-        file = FabricLoader.getInstance().configDir.resolve("skysmapshapes").resolve("$key.json")
-        all = read(file!!)
-        readNotes(file!!)
-        Log.info("Loaded {} shape(s) for {} from {}", all.size, name, file)
+        val path = FabricLoader.getInstance().configDir.resolve("skysmapshapes").resolve("$key.json")
+        file = path
+        all = read(path)
+        readNotes(path)
+        Log.info("Loaded {} shape(s) for {} from {}", all.size, name, path)
     }
 
     /**
@@ -82,10 +92,14 @@ object ShapeStore {
         val shown = shownMiniHud.intersect(known)
         // Hide all's notes on this mod's own shapes are pruned as those shapes are deleted.
         val remembered = hiddenByHideAll.filterKeys { !it.startsWith(MINIHUD_ID) || it in known }
-        if (hidden.size != hiddenMiniHud.size || shown.size != shownMiniHud.size || remembered.size != hiddenByHideAll.size) {
+        val roles = lightRoles.filterKeys { !it.startsWith(MINIHUD_ID) || it in known }
+        if (hidden.size != hiddenMiniHud.size || shown.size != shownMiniHud.size || remembered.size != hiddenByHideAll.size ||
+            roles.size != lightRoles.size
+        ) {
             hiddenMiniHud = hidden
             shownMiniHud = shown
             hiddenByHideAll = remembered
+            lightRoles = roles
             save()
         }
     }
@@ -98,6 +112,16 @@ object ShapeStore {
         hiddenMiniHud = emptySet()
         shownMiniHud = emptySet()
         hiddenByHideAll = emptyMap()
+        lightRoles = emptyMap()
+    }
+
+    /** What the shape with [id] does to MiniHUD's light levels. */
+    fun lightRole(id: String): LightLevels.Role = lightRoles[id] ?: LightLevels.Role.SHOW
+
+    fun setLightRole(id: String, role: LightLevels.Role) {
+        lightRoles = if (role == LightLevels.Role.SHOW) lightRoles - id else lightRoles + (id to role)
+        save()
+        LightLevels.refresh()
     }
 
     /**
@@ -156,6 +180,7 @@ object ShapeStore {
         hiddenMiniHud = hiddenMiniHud - id
         shownMiniHud = shownMiniHud - id
         hiddenByHideAll = hiddenByHideAll - id
+        lightRoles = lightRoles - id
         save()
     }
 
@@ -170,7 +195,7 @@ object ShapeStore {
             if (shape is MiniHudShape && inMiniHudToo && shape.enabledInMiniHud && shape.changeable &&
                 setInMiniHud(shape, false)) did += IN_MINIHUD
             // Read again: switching it off in MiniHUD gave it a new state.
-            val now = if (shape is MiniHudShape) MiniHudShapes.all.firstOrNull { it.id == shape.id } ?: shape else shape
+            val now = latest(shape)
             if (now.visible) {
                 setVisible(now, false)
                 did += ON_MAP
@@ -191,7 +216,7 @@ object ShapeStore {
         if (remembered.isEmpty()) {
             for (shape in shapes) {
                 if (shape is MiniHudShape && inMiniHudToo && !shape.enabledInMiniHud && shape.changeable) setInMiniHud(shape, true)
-                val now = if (shape is MiniHudShape) MiniHudShapes.all.firstOrNull { it.id == shape.id } ?: shape else shape
+                val now = latest(shape)
                 if (!now.visible) setVisible(now, true)
             }
             return shapes.size
@@ -199,13 +224,17 @@ object ShapeStore {
         for (shape in remembered) {
             val did = hiddenByHideAll[shape.id].orEmpty()
             if (shape is MiniHudShape && IN_MINIHUD in did) setInMiniHud(shape, true)
-            val now = if (shape is MiniHudShape) MiniHudShapes.all.firstOrNull { it.id == shape.id } ?: shape else shape
+            val now = latest(shape)
             if (ON_MAP in did) setVisible(now, true)
         }
         hiddenByHideAll = hiddenByHideAll - remembered.map { it.id }.toSet()
         save()
         return remembered.size
     }
+
+    /** [shape] as last read: one of MiniHUD's gets a new state each time it is switched on or off there. */
+    private fun latest(shape: MapShape): MapShape =
+        if (shape is MiniHudShape) MiniHudShapes.all.firstOrNull { it.id == shape.id } ?: shape else shape
 
     /** How many of [shapes] Hide all hid and Show all would bring back. */
     fun hiddenByHideAll(shapes: List<MapShape>): Int = shapes.count { it.id in hiddenByHideAll }
@@ -228,12 +257,13 @@ object ShapeStore {
     fun remove(id: String) {
         all = all.filter { it.id != id }
         hiddenByHideAll = hiddenByHideAll - id
+        lightRoles = lightRoles - id
         save()
     }
 
     /**
      * A display name and a file name for the world: the server address as typed in the server
-     * list, or the single-player world's folder.
+     * list, or the single-player world's name.
      */
     private fun worldOf(minecraft: Minecraft): Pair<String, String>? {
         minecraft.currentServer?.ip?.let { address ->
@@ -251,29 +281,53 @@ object ShapeStore {
 
     private fun safe(text: String): String = text.replace(Regex("[^A-Za-z0-9._-]"), "_").ifEmpty { "_" }
 
+    /**
+     * The shapes in [path]. Anything that cannot be read is skipped, and the file is first copied
+     * aside, because the next save writes only what was read and would lose the rest for good.
+     */
     private fun read(path: Path): List<Shape> {
         if (!Files.exists(path)) return emptyList()
         return try {
             val json = Files.newBufferedReader(path).use { JsonParser.parseReader(it) }.asJsonObject
-            json.getAsJsonArray("shapes")?.mapNotNull { element ->
+            var skipped = false
+            val shapes = json.getAsJsonArray("shapes")?.mapNotNull { element ->
                 try {
                     fromJson(element.asJsonObject).also { require(it.isValid()) { "a size, place or dimension no shape can have" } }
                 } catch (e: Exception) {
                     Log.warn("Skipping a shape in {} that could not be read: {}", path, e.toString())
+                    skipped = true
                     null
                 }
             } ?: emptyList()
+            if (skipped) keepCopy(path)
+            shapes
         } catch (e: Exception) {
             Log.error("Could not read $path", e)
+            keepCopy(path)
             emptyList()
         }
     }
 
-    /** The notes kept beside the shapes: which MiniHUD shapes are shown or hidden, and what Hide all hid. */
+    /** Copies [path] beside itself, named for when, so nothing in it is lost. */
+    private fun keepCopy(path: Path) {
+        try {
+            val copy = path.resolveSibling("${path.fileName}.unreadable-${System.currentTimeMillis()}")
+            Files.copy(path, copy, StandardCopyOption.REPLACE_EXISTING)
+            Log.warn("Kept a copy of {} as {}", path.fileName, copy.fileName)
+        } catch (e: Exception) {
+            Log.error("Could not keep a copy of $path", e)
+        }
+    }
+
+    /**
+     * The notes kept beside the shapes: which MiniHUD shapes are shown or hidden, what Hide all
+     * hid, and what shapes do to light levels.
+     */
     private fun readNotes(path: Path) {
         hiddenMiniHud = emptySet()
         shownMiniHud = emptySet()
         hiddenByHideAll = emptyMap()
+        lightRoles = emptyMap()
         try {
             if (!Files.exists(path)) return
             val json = Files.newBufferedReader(path).use { JsonParser.parseReader(it) }.asJsonObject
@@ -281,6 +335,8 @@ object ShapeStore {
             shownMiniHud = json.getAsJsonArray("shownMiniHud")?.map { it.asString }?.toSet() ?: emptySet()
             hiddenByHideAll = json.getAsJsonObject("hiddenByHideAll")?.entrySet()
                 ?.associate { (id, did) -> id to did.asJsonArray.map { it.asString }.toSet() } ?: emptyMap()
+            lightRoles = json.getAsJsonObject("lightLevels")?.entrySet()
+                ?.mapNotNull { (id, role) -> LightLevels.Role.fromSaved(role.asString)?.let { id to it } }?.toMap() ?: emptyMap()
         } catch (e: Exception) {
             Log.warn("Could not read the shown and hidden notes in {}: {}", path, e.toString())
         }
@@ -298,6 +354,9 @@ object ShapeStore {
             if (shownMiniHud.isNotEmpty()) json.add("shownMiniHud", JsonArray().also { a -> shownMiniHud.sorted().forEach(a::add) })
             if (hiddenByHideAll.isNotEmpty()) json.add("hiddenByHideAll", JsonObject().also { o ->
                 hiddenByHideAll.toSortedMap().forEach { (id, did) -> o.add(id, JsonArray().also { a -> did.sorted().forEach(a::add) }) }
+            })
+            if (lightRoles.isNotEmpty()) json.add("lightLevels", JsonObject().also { o ->
+                lightRoles.toSortedMap().forEach { (id, role) -> o.addProperty(id, role.saved) }
             })
             SafeFiles.writeString(path, GSON.toJson(json))
         } catch (e: Exception) {
@@ -328,7 +387,7 @@ object ShapeStore {
     }
 
     private fun fromJson(json: JsonObject) = Shape(
-        id = json.get("id")?.asString ?: java.util.UUID.randomUUID().toString(),
+        id = json.get("id")?.asString ?: UUID.randomUUID().toString(),
         label = json.get("label")?.asString ?: "",
         dimension = json.get("dimension").asString,
         type = Shape.Type.valueOf(json.get("type").asString.uppercase()),

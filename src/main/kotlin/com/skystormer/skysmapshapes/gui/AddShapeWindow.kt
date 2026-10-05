@@ -1,5 +1,6 @@
 package com.skystormer.skysmapshapes.gui
 
+import com.mojang.blaze3d.platform.InputConstants
 import com.skystormer.skysmapshapes.Colours
 import com.skystormer.skysmapshapes.Config
 import com.skystormer.skysmapshapes.Dimensions
@@ -9,10 +10,17 @@ import com.skystormer.skysmapshapes.MiniHudGeometry
 import com.skystormer.skysmapshapes.MiniHudShapes
 import com.skystormer.skysmapshapes.Shape
 import com.skystormer.skysmapshapes.ShapeStore
+import java.util.UUID
+import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.hypot
+import kotlin.math.roundToInt
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenKeyboardEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents
 import net.fabricmc.fabric.api.client.screen.v1.Screens
+import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.AbstractWidget
@@ -20,17 +28,11 @@ import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.components.EditBox
 import net.minecraft.client.gui.narration.NarrationElementOutput
 import net.minecraft.client.gui.screens.Screen
-import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.client.input.CharacterEvent
 import net.minecraft.client.input.KeyEvent
 import net.minecraft.client.input.MouseButtonEvent
 import net.minecraft.client.input.MouseButtonInfo
 import net.minecraft.network.chat.Component
-import kotlin.math.abs
-import kotlin.math.ceil
-import kotlin.math.floor
-import kotlin.math.hypot
-import kotlin.math.roundToInt
 
 /**
  * Adding or editing one of this mod's shapes on Xaero's world map itself, in a small window that is
@@ -63,16 +65,8 @@ object AddShapeWindow {
     private const val PILL = 12
     private const val GAP = 2
     private const val LINE = 10
-    private const val MAX_SIZE = 1_000_000.0
-    private const val MIN_Y = -2048
-    private const val MAX_Y = 2048
+    private const val MAX_SIZE = Shape.MAX_TYPED_SIZE
     private const val DRAFT_ID = "skysmapshapes:draft"
-
-    private const val ESCAPE = 256
-    private const val ENTER = 257
-    private const val KEYPAD_ENTER = 335
-    private const val UP = 265
-    private const val DOWN = 264
 
     private const val WHITE = 0xFFFFFFFF.toInt()
     private const val GREY = 0xFF9A9A9A.toInt()
@@ -133,6 +127,9 @@ object AddShapeWindow {
     private var blocksPerUnit = 1f
 
     val active get() = screen != null
+
+    /** The form picked, or the first MiniHUD has for this kind of shape. */
+    private fun chosenForm(): MiniHudGeometry.Form = form ?: MiniHudGeometry.forms(type).first()
 
     /** The shape as it stands, for drawing, or null when nothing is being made. */
     fun draft(): Shape? = if (screen == null) null else build()
@@ -446,15 +443,14 @@ object AddShapeWindow {
         val focused = boxes.entries.firstOrNull { it.value.isFocused }?.key
         widgets.clear()
         boxes.clear()
-        val INNER = inner
         val x0 = PAD
         var y = CONTENT_TOP + GAP
 
-        box("name", x0, y, INNER, "Name", 64)
+        box("name", x0, y, inner, "Name", 64)
         y += BOX + GAP
 
         val kinds = listOf(Shape.Type.CIRCLE, Shape.Type.SQUARE, Shape.Type.RECTANGLE, Shape.Type.RHOMBUS, Shape.Type.OCTAGON, Shape.Type.ELLIPSE)
-        val kindWidth = (INNER - GAP * 2) / 3
+        val kindWidth = (inner - GAP * 2) / 3
         kinds.forEachIndexed { i, kind ->
             val label = when (kind) { Shape.Type.RECTANGLE -> "Rect"; Shape.Type.RHOMBUS -> "Diamond"; else -> kind.title }
             widgets += Pill(x0 + (kindWidth + GAP) * (i % 3), y + (PILL + GAP) * (i / 3), kindWidth, PILL, { label }, { type == kind },
@@ -462,27 +458,27 @@ object AddShapeWindow {
         }
         y += (PILL + GAP) * 2
 
-        val half = (INNER - GAP) / 2
-        val cell = (INNER - GAP * 2) / 3
+        val half = (inner - GAP) / 2
+        val cell = (inner - GAP * 2) / 3
         box("x", x0 + 9, y, cell - 9, "X", 12)
         box("z", x0 + cell + GAP + 9, y, cell - 9, "Z", 12)
-        box("y", x0 + (cell + GAP) * 2 + 9, y, INNER - (cell + GAP) * 2 - 9, if (here()) "feet" else "sea", 6)
+        box("y", x0 + (cell + GAP) * 2 + 9, y, inner - (cell + GAP) * 2 - 9, if (here()) "feet" else "sea", 6)
         y += BOX + GAP
 
         if (type.sized == Shape.Sized.RADIUS) {
-            box("r", x0 + 40, y, INNER - 40, "blocks", 10)
+            box("r", x0 + 40, y, inner - 40, "blocks", 10)
         } else {
             box("w", x0 + 9, y, half - 9, "width", 10)
             box("l", x0 + half + GAP + 9, y, half - 9, "length", 10)
             y += BOX + GAP
-            val third = (INNER - 9) / 2
+            val third = (inner - 9) / 2
             box("x1", x0 + 9, y, third, "X", 12)
-            box("z1", x0 + 9 + third + GAP, y, INNER - 9 - third - GAP, "Z", 12)
+            box("z1", x0 + 9 + third + GAP, y, inner - 9 - third - GAP, "Z", 12)
             y += BOX + GAP
             box("x2", x0 + 9, y, third, "X", 12)
-            box("z2", x0 + 9 + third + GAP, y, INNER - 9 - third - GAP, "Z", 12)
+            box("z2", x0 + 9 + third + GAP, y, inner - 9 - third - GAP, "Z", 12)
             y += BOX + GAP
-            widgets += Pill(x0, y, INNER, PILL, { "Mouse: from " + if (fromCorner) "corner 1" else "centre" }, { fromCorner },
+            widgets += Pill(x0, y, inner, PILL, { "Mouse: from " + if (fromCorner) "corner 1" else "centre" }, { fromCorner },
                 { "From the centre, the shape grows evenly both ways. From corner 1, it stays pinned at corner 1 and the mouse sets the opposite corner." }) {
                 fromCorner = !fromCorner
                 if (fromCorner) { cornerX = floor(minX).toInt(); cornerZ = floor(minZ).toInt() }
@@ -492,7 +488,7 @@ object AddShapeWindow {
         y += (if (type.sized == Shape.Sized.RADIUS) BOX else PILL) + GAP
 
         widgets += Pill(x0, y, 30, PILL, { "Fill" }, { fill }, { "Shade the inside as well as drawing the outline." }) { fill = !fill }
-        val swatch = minOf(14, (INNER - 32) / Colours.entries.size)
+        val swatch = minOf(14, (inner - 32) / Colours.entries.size)
         Colours.entries.forEachIndexed { i, c ->
             widgets += Pill(x0 + 32 + i * swatch, y + 1, swatch - 1, 10, { "" }, { colour == c.argb }, { c.title }, swatch = c.argb) { colour = c.argb }
         }
@@ -501,11 +497,11 @@ object AddShapeWindow {
         if (miniHudOffered()) {
             val forms = MiniHudGeometry.forms(type)
             if (form !in forms) form = forms.first()
-            widgets += Pill(x0, y, if (inMiniHud) half else INNER, PILL, { if (inMiniHud) "In: MiniHUD" else "Make it in: Map Shapes" }, { inMiniHud },
+            widgets += Pill(x0, y, if (inMiniHud) half else inner, PILL, { if (inMiniHud) "In: MiniHUD" else "Make it in: Map Shapes" }, { inMiniHud },
                 { whereTip() }) { inMiniHud = !inMiniHud; lagWarned = null; rebuild() }
             if (inMiniHud) {
-                widgets += Pill(x0 + half + GAP, y, INNER - half - GAP, PILL, { "As: " + MiniHudGeometry.formName(type, form!!) }, { false },
-                    { "How it stands up in the world. " + MiniHudGeometry.formTip(form!!) + if (forms.size == 1) " MiniHUD has only this for a ${type.title.lowercase()}." else "" },
+                widgets += Pill(x0 + half + GAP, y, inner - half - GAP, PILL, { "As: " + MiniHudGeometry.formName(type, chosenForm()) }, { false },
+                    { "How it stands up in the world. " + MiniHudGeometry.formTip(chosenForm()) + if (forms.size == 1) " MiniHUD has only this for a ${type.title.lowercase()}." else "" },
                     enabled = forms.size > 1) {
                     form = forms[(forms.indexOf(form) + 1) % forms.size]
                     lagWarned = null
@@ -517,11 +513,11 @@ object AddShapeWindow {
         // Room for three lines of hint or message.
         hintTop = y
         y += LINE * 3 + GAP
-        val buttonWidth = (INNER - GAP) / 2
+        val buttonWidth = (inner - GAP) / 2
         widgets += Button.builder(Component.literal(if (existing == null) "Create" else "Save")) { commit() }
             .bounds(x0, y, buttonWidth, 16).build()
         widgets += Button.builder(Component.literal("Cancel")) { cancel() }
-            .bounds(x0 + buttonWidth + GAP, y, INNER - buttonWidth - GAP, 16).build()
+            .bounds(x0 + buttonWidth + GAP, y, inner - buttonWidth - GAP, 16).build()
         y += 16 + GAP
         contentHeight = y - CONTENT_TOP
         sync(null)
@@ -534,8 +530,8 @@ object AddShapeWindow {
 
     private fun whereTip(): String = if (!inMiniHud) "Where it is made. MiniHUD draws it in the world too, as well as on the map."
     else "MiniHUD: an ordinary MiniHUD shape, in the world as well as on the map, edited in MiniHUD afterwards. " +
-        if (here()) "It is put at your feet." else "You are not in the ${Dimensions.name(dimension)}, so it goes into MiniHUD's file for it, and MiniHUD has it when you go there." +
-        " It is at the Y typed, or with none, ${if (here()) "at your feet" else "at height ${MapMenus.SEA_LEVEL}"}."
+        (if (here()) "" else "You are not in the ${Dimensions.name(dimension)}, so it goes into MiniHUD's file for it, and MiniHUD has it when you go there. ") +
+        "It is at the Y typed, or with none, ${if (here()) "at your feet" else "at height ${MapMenus.SEA_LEVEL}"}."
 
     private fun box(key: String, x: Int, y: Int, width: Int, hint: String, maxLength: Int) {
         val box = EditBox(font(), x, y, width, BOX, Component.literal(hint))
@@ -576,8 +572,8 @@ object AddShapeWindow {
                 set("l", Shape.number(maxZ - minZ))
                 set("x1", floor(minX).toInt().toString())
                 set("z1", floor(minZ).toInt().toString())
-                set("x2", (Math.ceil(maxX).toInt() - 1).toString())
-                set("z2", (Math.ceil(maxZ).toInt() - 1).toString())
+                set("x2", (ceil(maxX).toInt() - 1).toString())
+                set("z2", (ceil(maxZ).toInt() - 1).toString())
             }
         } finally {
             syncing = false
@@ -594,7 +590,7 @@ object AddShapeWindow {
         if (key == "y") {
             // Empty is the default: your feet, or sea level for another dimension.
             if (text.isBlank()) y = null
-            else text.trim().toIntOrNull()?.let { y = it.coerceIn(MIN_Y, MAX_Y) }
+            else text.trim().toIntOrNull()?.let { y = it.coerceIn(-Shape.MAX_HEIGHT, Shape.MAX_HEIGHT) }
             lagWarned = null
             return
         }
@@ -608,9 +604,9 @@ object AddShapeWindow {
             "x1", "x2", "z1", "z2" -> {
                 val b = v.roundToInt()
                 val x1 = if (key == "x1") b else floor(minX).toInt()
-                val x2 = if (key == "x2") b else Math.ceil(maxX).toInt() - 1
+                val x2 = if (key == "x2") b else ceil(maxX).toInt() - 1
                 val z1 = if (key == "z1") b else floor(minZ).toInt()
-                val z2 = if (key == "z2") b else Math.ceil(maxZ).toInt() - 1
+                val z2 = if (key == "z2") b else ceil(maxZ).toInt() - 1
                 minX = minOf(x1, x2).toDouble(); maxX = maxOf(x1, x2) + 1.0
                 minZ = minOf(z1, z2).toDouble(); maxZ = maxOf(z1, z2) + 1.0
                 tracking = false
@@ -719,10 +715,10 @@ object AddShapeWindow {
         val code = event.key()
         val focused = focusedKey()
         when (code) {
-            ESCAPE -> { cancel(); return false }
-            ENTER, KEYPAD_ENTER -> { enter(focused); return false }
-            UP, DOWN -> if (focused != null && focused != "name" && boxes[focused]?.value?.isNotBlank() == true) {
-                step(focused, code == UP, event.hasShiftDown())
+            InputConstants.KEY_ESCAPE -> { cancel(); return false }
+            InputConstants.KEY_RETURN, InputConstants.KEY_NUMPADENTER -> { enter(focused); return false }
+            InputConstants.KEY_UP, InputConstants.KEY_DOWN -> if (focused != null && focused != "name" && boxes[focused]?.value?.isNotBlank() == true) {
+                step(focused, code == InputConstants.KEY_UP, event.hasShiftDown())
                 return false
             }
         }
@@ -805,7 +801,8 @@ object AddShapeWindow {
         if (existing != null && ShapeStore.byId(existing.id) == null) return show("${existing.name} is not on your map any more.")
         if (!shape.isValid()) return show("That size or place is beyond any world.")
         if (existing == null && inMiniHud) {
-            val made = shape.copy(id = java.util.UUID.randomUUID().toString())
+            val made = shape.copy(id = UUID.randomUUID().toString())
+            val form = chosenForm()
             MiniHudGeometry.whyTooBig(made, form)?.let { return show(it.substringBefore(" It stays")) }
             val warning = MiniHudGeometry.lagWarning(made, form)
             val asked = "$type ${made.radius} ${made.width} ${made.length} $form"
@@ -813,13 +810,12 @@ object AddShapeWindow {
                 lagWarned = asked
                 return show("$warning Press Create again to make it anyway.")
             }
-            val height = y ?: if (here()) Minecraft.getInstance().player?.blockY ?: MapMenus.SEA_LEVEL else MapMenus.SEA_LEVEL
-            MiniHudShapes.create(made, height, null, form)?.let { return show(it.substringBefore(", so it stays")) }
+            MiniHudShapes.create(made, y ?: MapMenus.miniHudY(made), null, form)?.let { return show(it.substringBefore(", so it stays")) }
             Log.info("Made {} in MiniHUD from the map", made.name)
         } else if (existing != null) {
             ShapeStore.put(shape.copy(id = existing.id, visible = existing.visible))
         } else {
-            ShapeStore.put(shape.copy(id = java.util.UUID.randomUUID().toString()))
+            ShapeStore.put(shape.copy(id = UUID.randomUUID().toString()))
         }
         close()
         s.setFocused(null)

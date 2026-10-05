@@ -31,7 +31,8 @@
   },
   "mixins": [
     "skysmapshapes.mixins.json",
-    "skysmapshapes.minimap.mixins.json"
+    "skysmapshapes.minimap.mixins.json",
+    "skysmapshapes.minihud.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=${loader_version}",
@@ -45,6 +46,7 @@
     "modmenu": "*",
     "xaerominimap": "*",
     "skysmapexposer": "*",
-    "skysstructuremap": "*"
+    "skysstructuremap": "*",
+    "minihud": "*"
   }
 }

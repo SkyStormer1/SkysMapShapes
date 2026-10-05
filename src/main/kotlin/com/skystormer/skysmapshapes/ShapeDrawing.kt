@@ -1,20 +1,20 @@
 package com.skystormer.skysmapshapes
 
-import com.skystormer.skysmapshapes.gui.AddShapeWindow
-
 import com.mojang.blaze3d.vertex.PoseStack
+import com.mojang.blaze3d.vertex.VertexConsumer
+import com.skystormer.skysmapshapes.gui.AddShapeWindow
+import kotlin.math.sqrt
+import net.minecraft.client.Minecraft
 import net.minecraft.resources.ResourceKey
 import net.minecraft.world.level.Level
 import net.minecraft.world.phys.Vec3
-import xaero.lib.client.graphics.XaeroBufferProvider
-import com.mojang.blaze3d.vertex.VertexConsumer
-import net.minecraft.client.Minecraft
 import org.joml.Matrix4f
 import org.joml.Vector3f
+import xaero.common.graphics.CustomRenderTypes as MinimapRenderTypes
 import xaero.lib.XaeroLib
+import xaero.lib.client.graphics.XaeroBufferProvider
 import xaero.map.MapProcessor
 import xaero.map.graphics.CustomRenderTypes
-import kotlin.math.sqrt
 
 /**
  * Draws the shapes for the dimension on screen, on Xaero's world map and minimap, as filled
@@ -112,7 +112,7 @@ object ShapeDrawing {
                 originX - MINIMAP_REACH, originZ - MINIMAP_REACH,
                 originX + MINIMAP_REACH, originZ + MINIMAP_REACH,
             )
-            val buffer = buffers.getBuffer(xaero.common.graphics.CustomRenderTypes.MAP_CHUNK_OVERLAY)
+            val buffer = buffers.getBuffer(MinimapRenderTypes.MAP_CHUNK_OVERLAY)
             draw(buffer, matrix, shapes, originX, originZ, blocksPerUnit(matrix), view)
         } catch (e: Throwable) {
             failOnce("minimap in this mode", e)

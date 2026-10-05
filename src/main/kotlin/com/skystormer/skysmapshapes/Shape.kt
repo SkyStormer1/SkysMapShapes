@@ -124,6 +124,9 @@ data class Shape(
     companion object {
         /** Well past the world border, in blocks; nothing real is bigger or further out. */
         const val MAX_SIZE = 60_000_000.0
+
+        /** The biggest size the add and edit screens take typed, in blocks. */
+        const val MAX_TYPED_SIZE = 1_000_000.0
         const val MAX_COORDINATE = 30_000_000
         const val MAX_HEIGHT = 2048
         const val MAX_LABEL = 128

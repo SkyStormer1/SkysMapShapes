@@ -120,7 +120,7 @@ class ShareScreen(private val parent: Screen?, private val shape: MapShape) :
 
         if (players.isEmpty()) {
             val text = when {
-                minecraft.connection?.onlinePlayers?.size ?: 0 <= 1 -> "Nobody else is online."
+                (minecraft.connection?.onlinePlayers?.size ?: 0) <= 1 -> "Nobody else is online."
                 else -> "No players match \"$query\"."
             }
             rowWidgets.add(addRenderableWidget(StringWidget(left, rowsTop + 6, WIDTH, font.lineHeight,

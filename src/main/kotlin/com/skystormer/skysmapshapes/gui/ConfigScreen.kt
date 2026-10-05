@@ -34,6 +34,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
     private var showMiniHud = Config.showMiniHud
     private var miniHudIncludeDisabled = Config.miniHudIncludeDisabled
     private var hideInMiniHud = Config.hideInMiniHud
+    private var lightInsideShapes = Config.lightInsideShapes
     private var fillOpacity = Config.fillOpacity
     private val presets = MutableList(Config.MAX_PRESETS) { i ->
         Config.presets.getOrNull(i)?.let { PresetDraft(it.name, Shape.number(it.radius), it.colour) }
@@ -55,6 +56,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         showMiniHud = true
         hideInMiniHud = true
         miniHudIncludeDisabled = false
+        lightInsideShapes = false
         thicknessScale = 1f
         fillOpacity = 0.15f
     }
@@ -91,6 +93,13 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
             "On: Hide all and Show all in the Shapes list switch MiniHUD's shapes off and on in MiniHUD too, so they go from the world as well. Off: they only hide them on the map. One shape at a time, you choose each time.") { hideInMiniHud = it }.also { it.active = installed })
         addRenderableWidget(toggle(left + (third + GAP) * 2, y, third, "Ones off in MiniHUD", miniHudIncludeDisabled,
             "Also draw MiniHUD shapes that are switched off in MiniHUD. They are always in the shapes list, so they can be switched back on.") { miniHudIncludeDisabled = it }.also { it.active = installed })
+        y += ROW + GAP
+        addRenderableWidget(toggle(left, y, WIDTH, "MiniHUD light levels only in shapes", lightInsideShapes,
+            if (installed) "With MiniHUD's light level overlay on, only show light levels inside your shapes. " +
+                "Right-click a shape to choose how it counts: show (the default), none (dark inside, even within another shape) or ignore. " +
+                "MiniHUD shapes count while they are on in MiniHUD, at their real size and height; " +
+                "this mod's own count while shown on the map, at every height. Needs MiniHUD shapes on."
+            else "MiniHUD is not installed.") { lightInsideShapes = it }.also { it.active = installed })
         y += ROW + GAP
 
         val half = (WIDTH - GAP) / 2
@@ -176,6 +185,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         Config.showMiniHud = showMiniHud
         Config.miniHudIncludeDisabled = miniHudIncludeDisabled
         Config.hideInMiniHud = hideInMiniHud
+        Config.lightInsideShapes = lightInsideShapes
         Config.fillOpacity = fillOpacity
         Config.presets = presets.mapNotNull { draft ->
             val radius = draft.radius.trim().toDoubleOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null

@@ -1,10 +1,10 @@
 package com.skystormer.skysmapshapes
 
 import com.mojang.blaze3d.platform.InputConstants
+import com.mojang.brigadier.arguments.StringArgumentType
+import com.skystormer.skysmapshapes.gui.AddShapeWindow
 import com.skystormer.skysmapshapes.gui.ShapeListScreen
 import com.skystormer.skysmapshapes.gui.ShapesPanel
-import com.skystormer.skysmapshapes.gui.AddShapeWindow
-import com.mojang.brigadier.arguments.StringArgumentType
 import net.fabricmc.api.ClientModInitializer
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands
@@ -83,7 +83,7 @@ object ShapesClient : ClientModInitializer {
             if (!hookChecked) {
                 hookChecked = true
                 reportMinimapHooks()
-                if (hookInstalled()) Log.info("Xaero hooks installed") else Log.warn("This version of Xaero's World Map is not supported; shapes will not be drawn on it")
+                if (hasHook("xaero.map.gui.GuiMap", "drawShapes")) Log.info("Xaero hooks installed") else Log.warn("This version of Xaero's World Map is not supported; shapes will not be drawn on it")
             }
             if (!labelsAdded) {
                 labelsAdded = try {
@@ -94,6 +94,7 @@ object ShapesClient : ClientModInitializer {
                 }
             }
             MiniHudShapes.tick(client)
+            LightLevels.tick()
             ShapeShare.tick()
             // Hover only means anything while the world map is open.
             if (client.gui.screen()?.javaClass?.name != "xaero.map.gui.GuiMap") ShapeHover.clear()
@@ -103,10 +104,6 @@ object ShapesClient : ClientModInitializer {
         }
     }
 
-    /**
-     * Whether the drawing mixin made it into Xaero's map screen. It is optional, so that an
-     * unsupported Xaero version costs the shapes and not the game; this is how that gets noticed.
-     */
     /**
      * Which of the two minimap hooks made it in: the one for terrain drawn from the world map, and
      * the one for the minimap's own (used underground and in the Nether). Both are optional, so
@@ -122,14 +119,12 @@ object ShapesClient : ClientModInitializer {
         if (!ownData) Log.warn("This version of Xaero's Minimap is not supported underground or in the Nether; shapes will be missing there")
     }
 
+    /**
+     * Whether a mixin method named like [name] made it into [className]. The hooks are optional, so
+     * that an unsupported Xaero version costs the shapes and not the game; this is how that gets noticed.
+     */
     private fun hasHook(className: String, name: String): Boolean = try {
         Class.forName(className).declaredMethods.any { it.name.contains(name) }
-    } catch (e: Throwable) {
-        false
-    }
-
-    private fun hookInstalled(): Boolean = try {
-        Class.forName("xaero.map.gui.GuiMap").declaredMethods.any { it.name.contains("drawShapes") }
     } catch (e: Throwable) {
         false
     }

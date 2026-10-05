@@ -149,8 +149,8 @@ class ShapeEditScreen private constructor(
                 }
                 label(left, y, LABEL, name)
                 radiusBox = field(left + LABEL, y, boxWidth, radiusText, "blocks", 10)
+                    .also { it.setTooltip(Tooltip.create(Component.literal(explanation))) }
                 label(left + LABEL + boxWidth + 6, y, 60, "blocks")
-                radiusBox!!.setTooltip(Tooltip.create(Component.literal(explanation)))
             }
             Shape.Sized.WIDTH_LENGTH -> {
                 label(left, y, LABEL, "Width (X)")
@@ -158,13 +158,13 @@ class ShapeEditScreen private constructor(
                 label(left + LABEL + boxWidth + 6, y, 60, "Length (Z)")
                 lengthBox = field(left + LABEL + boxWidth + 66, y, boxWidth, lengthText, "blocks", 10)
                 if (type == Shape.Type.RECTANGLE) {
-                y += ROW + GAP
-                addRenderableWidget(
-                    CycleButton.builder<Shape.Anchor>({ Component.literal(it.title) }, anchor)
-                        .withValues(Shape.Anchor.entries)
-                        .create(left, y, WIDTH, ROW, Component.literal("X and Z are the")) { _, value -> keepEdits(); anchor = value; rebuildWidgets() }
-                        .also { it.setTooltip(Tooltip.create(Component.literal("Centre: the rectangle is centred on X, Z. North-west corner: it starts at X, Z and goes east and south, for lining up with block or chunk edges."))) }
-                )
+                    y += ROW + GAP
+                    addRenderableWidget(
+                        CycleButton.builder<Shape.Anchor>({ Component.literal(it.title) }, anchor)
+                            .withValues(Shape.Anchor.entries)
+                            .create(left, y, WIDTH, ROW, Component.literal("X and Z are the")) { _, value -> keepEdits(); anchor = value; rebuildWidgets() }
+                            .also { it.setTooltip(Tooltip.create(Component.literal("Centre: the rectangle is centred on X, Z. North-west corner: it starts at X, Z and goes east and south, for lining up with block or chunk edges."))) }
+                    )
                 }
             }
         }
@@ -209,7 +209,7 @@ class ShapeEditScreen private constructor(
                                 !reachable -> "MiniHUD's files for the ${Dimensions.name(dimension)} could not be found."
                                 inThisDimension ->
                                     "MiniHUD: it becomes an ordinary MiniHUD shape, shown in the world as well as on the map, and edited in MiniHUD. " +
-                                        "A flat shape needs a height, so it is put at your feet. Change it afterwards in MiniHUD's editor."
+                                        "A flat shape needs a height, so it is put at ${if (sharedY != null) "height $sharedY" else "your feet"}. Change it afterwards in MiniHUD's editor."
                                 else ->
                                     "MiniHUD: it becomes an ordinary MiniHUD shape, shown in the world as well as on the map. " +
                                         "You are not in the ${Dimensions.name(dimension)}, so it goes into MiniHUD's file for it, at height ${sharedY ?: MapMenus.SEA_LEVEL}, " +
@@ -257,7 +257,7 @@ class ShapeEditScreen private constructor(
                     .build()
             )
             if (toMiniHud) {
-                // Greyed out from another dimension: MiniHUD only holds the one you are in.
+                // Greyed out when MiniHUD cannot take it, and the tooltip says why.
                 val why = MapMenus.whyNotMoveToMiniHud(existing)
                 addRenderableWidget(
                     // Back to the map or list, not here: the shape is gone from this mod once moved.
@@ -265,7 +265,8 @@ class ShapeEditScreen private constructor(
                         .bounds(left + shareWidth + GAP, y, WIDTH - shareWidth - GAP, ROW)
                         .tooltip(Tooltip.create(Component.literal(
                             "Turn this into a MiniHUD shape, shown in the world as well as on the map instead of here. " +
-                                "It is put at your height, and can be changed afterwards in MiniHUD's editor." +
+                                "It is put at ${if (Dimensions.ofPlayer() == existing.dimension) "your feet" else "height ${MapMenus.miniHudY(existing)}"}, " +
+                                "and can be changed afterwards in MiniHUD's editor." +
                                 if (why != null) "\n\n" + why else ""
                         )))
                         .build()
@@ -370,18 +371,14 @@ class ShapeEditScreen private constructor(
                 lagWarned = asked
                 return show("$warning Press Save again to make it anyway.")
             }
-            MiniHudShapes.create(shape, sharedY ?: playerY(), sharedMiniHudType, form)?.let { return show(it.substringBefore(", so it stays")) }
+            MiniHudShapes.create(shape, sharedY ?: MapMenus.miniHudY(shape), sharedMiniHudType, form)?.let { return show(it.substringBefore(", so it stays")) }
             MapMenus.say("Made ${shape.name} in MiniHUD" + (form?.let { " as a " + MiniHudGeometry.formName(type, it).lowercase() } ?: "") +
                 if (Dimensions.ofPlayer() == dimension) "" else ", there when you next go to the ${Dimensions.name(dimension)}")
         } else {
-            ShapeStore.put(if (existing != null) shape.copy(id = existing.id, visible = existing.visible, y = existing.y) else shape)
+            ShapeStore.put(if (existing != null) shape.copy(id = existing.id, visible = existing.visible, y = existing.y) else shape.copy(y = sharedY))
         }
         minecraft.gui.setScreen(parent)
     }
-
-    /** The height a shape made in MiniHUD is put at: where you stand, or the sea level if elsewhere. */
-    private fun playerY(): Int =
-        if (Dimensions.ofPlayer() == dimension) minecraft.player?.blockY ?: MapMenus.SEA_LEVEL else MapMenus.SEA_LEVEL
 
     private fun size(text: String): Double? = text.trim().toDoubleOrNull()?.takeIf { it > 0 && it <= MAX_SIZE }
 
@@ -423,6 +420,6 @@ class ShapeEditScreen private constructor(
         private const val ROW = 20
         private const val GAP = 2
         private const val LABEL = 72
-        private const val MAX_SIZE = 1_000_000.0
+        private const val MAX_SIZE = Shape.MAX_TYPED_SIZE
     }
 }

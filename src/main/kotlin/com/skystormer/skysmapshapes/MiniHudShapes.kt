@@ -8,7 +8,6 @@ import com.google.gson.JsonParser
 import java.lang.reflect.Method
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.StandardCopyOption
 import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.Screen
@@ -208,7 +207,8 @@ object MiniHudShapes {
         val colour = json.get("color")?.asInt?.let { it or 0xFF000000.toInt() } ?: Colours.WHITE.argb
         // The same shape keeps the same id while it is not changed, so hiding it here sticks.
         val id = "minihud:" + dimension + ":" + type + ":" + MiniHudGeometry.identity(json)
-        return MiniHudShape(id, label, dimension, colour, geometry, type, enabled, MiniHudGeometry.heightOf(json), handle, file)
+        return MiniHudShape(id, label, dimension, colour, geometry, type, enabled, MiniHudGeometry.heightOf(json), handle, file,
+            MiniHudGeometry.volumeOf(type, json))
     }
 
     /**
@@ -282,17 +282,14 @@ object MiniHudShapes {
     /**
      * Changes the shapes in one of MiniHUD's dimension files, keeping everything else in it.
      * [change] gets the list of shapes and says whether it changed anything; only then is the
-     * file written, by a new file replacing the old so a failure never leaves half a file.
+     * file written, through [SafeFiles] so a failure never leaves half a file.
      */
     private fun editFile(file: Path, change: (JsonArray) -> Boolean): Boolean = try {
         val root = if (Files.exists(file)) Files.newBufferedReader(file).use { JsonParser.parseReader(it) }.asJsonObject else JsonObject()
         val holder = root.getAsJsonObject("shapes") ?: JsonObject().also { root.add("shapes", it) }
         val shapes = holder.getAsJsonArray("shapes") ?: JsonArray().also { holder.add("shapes", it) }
         if (change(shapes)) {
-            Files.createDirectories(file.parent)
-            val temp = file.resolveSibling(file.fileName.toString() + ".skysmapshapes.tmp")
-            Files.writeString(temp, GSON.toJson(root))
-            Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            SafeFiles.writeString(file, GSON.toJson(root))
             fileCache.remove(file)
         }
         true
