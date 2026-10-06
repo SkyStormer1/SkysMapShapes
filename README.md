@@ -19,7 +19,6 @@ beacon.
 
 - **Add a shape anywhere.** Right-click the world map and choose **Add shape here**, right-click
   one of your waypoints to centre a shape on it, or type in the coordinates yourself. With
-  [Sky's Structure Map](https://github.com/SkyStormer1/SkysStructureMap) or
   [Sky's Map Exposer](https://github.com/SkyStormer1/SkysMapExposer) installed, structures and
   BlueMap markers have **Add shape here** too.
 - **Six kinds of shape:** circle, square, rectangle, diamond, octagon and ellipse. Circles,
