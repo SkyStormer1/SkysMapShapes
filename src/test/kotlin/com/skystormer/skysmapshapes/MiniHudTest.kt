@@ -62,6 +62,16 @@ class MiniHudTest {
     }
 
     @Test
+    fun aPyramidSavedByMiniHudInLowerCaseStandsUp() {
+        val json = JsonParser.parseString("""{"type":"pyramid","origin_x":0.0,"origin_y":64.0,"origin_z":0.0,"bottom_radius":8.0,"top_radius":0.0,"direction":"up","height":8}""").asJsonObject
+        val volume = MiniHudGeometry.volumeOf("pyramid", json)!!
+        assertTrue(volume.contains(0, 66, 0), "above its base")
+        assertFalse(volume.contains(0, 62, 0), "not below it")
+        assertFalse(volume.contains(10, 66, 0), "not sideways along x, as an east-facing one would be")
+        assertNotNull(parse(json.toString()))
+    }
+
+    @Test
     fun blockLineIsAnOpenLine() {
         val shape = parse("""{"type":"block_line","start":[0,64,0],"end":[10,64,0]}""")!!
         assertFalse(shape.geometry.closed)
@@ -123,6 +133,8 @@ class MiniHudTest {
         val octagon = json(Shape.Type.OCTAGON, radius = 8.0)
         assertEquals("octagon_pyramid", octagon.get("type").asString)
         assertEquals(octagon.get("bottom_radius").asDouble, octagon.get("top_radius").asDouble)
+        // MiniHUD reads a direction by its lower-case name only, as Direction.byName does.
+        assertEquals("up", octagon.get("direction").asString)
 
         val box = json(Shape.Type.RECTANGLE, w = 10.0, l = 4.0)
         assertEquals("box", box.get("type").asString)

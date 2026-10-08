@@ -67,7 +67,7 @@ internal object MiniHudGeometry {
                 "octagon_pyramid" -> Volume.Section.OCTAGON
                 else -> Volume.Section.CIRCLE
             }
-            return standing(json.get("direction")?.asString ?: "UP", origin.map { Math.floor(it) + 0.5 }.toDoubleArray(), section,
+            return standing(json.get("direction")?.asString?.uppercase() ?: "UP", origin.map { Math.floor(it) + 0.5 }.toDoubleArray(), section,
                 json.get("bottom_radius")?.asDouble ?: 0.0, json.get("top_radius")?.asDouble ?: 0.0, json.get("height")?.asInt ?: 1)
         }
         val centre = vec(json, "center")?.let { snapped(it, json.get("snap")?.asString) } ?: return null
@@ -117,7 +117,7 @@ internal object MiniHudGeometry {
         val bottom = json.get("bottom_radius")?.asDouble ?: 0.0
         val top = json.get("top_radius")?.asDouble ?: 0.0
         val height = json.get("height")?.asDouble ?: 1.0
-        val direction = json.get("direction")?.asString ?: "UP"
+        val direction = json.get("direction")?.asString?.uppercase() ?: "UP"
         if (direction == "UP" || direction == "DOWN") {
             val r = maxOf(bottom, top)
             return when (type) {
@@ -326,7 +326,8 @@ internal object MiniHudGeometry {
             json.addProperty("origin_z", b.centreZ)
             json.addProperty("bottom_radius", shape.radius)
             json.addProperty("top_radius", top)
-            json.addProperty("direction", "UP")
+            // MiniHUD reads a direction by its lower-case name; "UP" comes back as none and breaks the shape.
+            json.addProperty("direction", "up")
             json.addProperty("height", height)
             liftLimit("max_radius", maxOf(shape.radius, top), DEFAULT_MAX_RADIUS)
             liftLimit("max_height", height.toDouble(), DEFAULT_MAX_HEIGHT)
