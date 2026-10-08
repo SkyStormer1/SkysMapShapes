@@ -35,6 +35,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
     private var miniHudIncludeDisabled = Config.miniHudIncludeDisabled
     private var hideInMiniHud = Config.hideInMiniHud
     private var lightInsideShapes = Config.lightInsideShapes
+    private var netherBiomeSpawns = Config.netherBiomeSpawns
     private var fillOpacity = Config.fillOpacity
     private val presets = MutableList(Config.MAX_PRESETS) { i ->
         Config.presets.getOrNull(i)?.let { PresetDraft(it.name, Shape.number(it.radius), it.colour) }
@@ -57,6 +58,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         hideInMiniHud = true
         miniHudIncludeDisabled = false
         lightInsideShapes = false
+        netherBiomeSpawns = true
         thicknessScale = 1f
         fillOpacity = 0.15f
     }
@@ -70,7 +72,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         addRenderableWidget(toggle(left, y, third, "Mod", enabled,
             "Off turns the whole mod off: no shapes drawn, no right-click options, no Shapes panel on the map. Your shapes are kept.") { enabled = it })
         addRenderableWidget(toggle(left + third + GAP, y, third, "Map panel", showPanel,
-            "The Shapes panel on the world map: every shape in the dimension shown, to hide, show or right-click. It docks under Sky's Map Exposer's bar or Sky's Structure Map's legend.") { showPanel = it })
+            "The Shapes panel on the world map: every shape in the dimension shown, to hide, show or right-click. It docks under Sky's Map Exposer's bar.") { showPanel = it })
         addRenderableWidget(Button.builder(Component.literal("Shapes list…")) {
             save()
             minecraft.gui.setScreen(ShapeListScreen(this))
@@ -100,6 +102,13 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
                 "MiniHUD shapes count while they are on in MiniHUD, at their real size and height; " +
                 "this mod's own count while shown on the map, at every height. Needs MiniHUD shapes on."
             else "MiniHUD is not installed.") { lightInsideShapes = it }.also { it.active = installed })
+        y += ROW + GAP
+        addRenderableWidget(toggle(left, y, WIDTH, "MiniHUD: Nether spawns by biome", netherBiomeSpawns,
+            if (installed) "In the Nether, MiniHUD's light level overlay marks a floor when a mob of that biome can spawn on it. " +
+                "Magma counts where fire-immune mobs spawn (wastes, crimson forest, soul sand valley, basalt deltas); " +
+                "red nether wart blocks do not count in a crimson forest. " +
+                "The colours still follow light: only wither skeletons, skeletons and endermen need the dark."
+            else "MiniHUD is not installed.") { netherBiomeSpawns = it }.also { it.active = installed })
         y += ROW + GAP
 
         val half = (WIDTH - GAP) / 2
@@ -186,6 +195,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         Config.miniHudIncludeDisabled = miniHudIncludeDisabled
         Config.hideInMiniHud = hideInMiniHud
         Config.lightInsideShapes = lightInsideShapes
+        Config.netherBiomeSpawns = netherBiomeSpawns
         Config.fillOpacity = fillOpacity
         Config.presets = presets.mapNotNull { draft ->
             val radius = draft.radius.trim().toDoubleOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null

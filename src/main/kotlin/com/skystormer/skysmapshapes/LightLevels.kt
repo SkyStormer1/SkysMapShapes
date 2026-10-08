@@ -17,7 +17,9 @@ import net.minecraft.core.BlockPos
  * mod's own while they are shown on the map. This mod's shapes have no height yet, so they count
  * at every height inside their outline.
  *
- * MiniHUD is reached by reflection and one optional hook, so nothing of it is copied here; if a
+ * In the Nether, which floors it marks at all is [NetherSpawns]'s.
+ *
+ * MiniHUD is reached by reflection and optional hooks, so nothing of it is copied here; if a
  * MiniHUD update changes what is hooked, its light levels simply show as MiniHUD has them.
  */
 object LightLevels {
@@ -125,9 +127,10 @@ object LightLevels {
     }
 
     private fun state(): Int {
-        if (!active) return 0
-        val dimension = Dimensions.ofPlayer() ?: return 0
-        var hash = 1
+        val magma = NetherSpawns.active
+        if (!active) return magma.hashCode()
+        val dimension = Dimensions.ofPlayer() ?: return magma.hashCode()
+        var hash = 31 + magma.hashCode()
         for (shape in ShapeStore.inDimension(dimension)) hash = hash * 31 + (shape.hashCode() xor ShapeStore.lightRole(shape.id).hashCode())
         for (shape in MiniHudShapes.inDimension(dimension)) {
             hash = hash * 31 + (shape.id.hashCode() xor shape.enabledInMiniHud.hashCode() xor ShapeStore.lightRole(shape.id).hashCode())

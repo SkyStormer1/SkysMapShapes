@@ -48,6 +48,12 @@ object Config {
      */
     var lightInsideShapes = false
 
+    /**
+     * Whether MiniHUD's light level overlay marks floors in the Nether by what spawns in each
+     * biome, not by whether a creeper could stand there (see [NetherSpawns]).
+     */
+    var netherBiomeSpawns = true
+
     /** Whether shapes shared in chat by other players are offered as a clickable add button. */
     var shareInChat = true
 
@@ -137,6 +143,7 @@ object Config {
             miniHudIncludeDisabled = json.get("miniHudIncludeDisabled")?.asBoolean ?: miniHudIncludeDisabled
             hideInMiniHud = json.get("hideInMiniHud")?.asBoolean ?: hideInMiniHud
             lightInsideShapes = json.get("lightInsideShapes")?.asBoolean ?: lightInsideShapes
+            netherBiomeSpawns = json.get("netherBiomeSpawns")?.asBoolean ?: netherBiomeSpawns
             shareInChat = json.get("shareInChat")?.asBoolean ?: shareInChat
             privateShareCommand = json.get("privateShareCommand")?.asString?.trim()?.removePrefix("/")
                 ?.takeIf { it.isNotEmpty() } ?: privateShareCommand
@@ -183,6 +190,7 @@ object Config {
             json.addProperty("miniHudIncludeDisabled", miniHudIncludeDisabled)
             json.addProperty("hideInMiniHud", hideInMiniHud)
             json.addProperty("lightInsideShapes", lightInsideShapes)
+            json.addProperty("netherBiomeSpawns", netherBiomeSpawns)
             json.addProperty("shareInChat", shareInChat)
             json.addProperty("privateShareCommand", privateShareCommand)
             json.addProperty("showPanel", showPanel)

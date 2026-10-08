@@ -19,8 +19,8 @@ beacon.
 
 - **Add a shape anywhere.** Right-click the world map and choose **Add shape here**, right-click
   one of your waypoints to centre a shape on it, or type in the coordinates yourself. With
-  [Sky's Map Exposer](https://github.com/SkyStormer1/SkysMapExposer) installed, structures and
-  BlueMap markers have **Add shape here** too.
+  [Sky's Map Exposer](https://github.com/SkyStormer1/SkysMapExposer) installed, BlueMap markers
+  have **Add shape here** too.
 - **Six kinds of shape:** circle, square, rectangle, diamond, octagon and ellipse. Circles,
   squares, diamonds and octagons are sized by their radius in blocks; rectangles and ellipses by
   their width and length.
@@ -84,6 +84,12 @@ MiniHUD is optional. When it is installed, this mod and MiniHUD work as one:
   counts: **show** (the default), **none** (dark inside, even within another shape, handy for a
   build you will dig out) or **ignore**. MiniHUD's shapes count at their real size and height while
   they are on in MiniHUD; this mod's own count at every height inside their outline.
+- **Nether spawns by biome.** MiniHUD's light level overlay asks whether a creeper could stand on a
+  block, which suits the Overworld. With **MiniHUD: Nether spawns by biome** on (the default), the
+  Nether's floors are marked by the mobs of their own biome instead: magma counts where fire-immune
+  mobs spawn (nether wastes, crimson forest, soul sand valley, basalt deltas), and red nether wart
+  blocks do not count in a crimson forest, where nothing spawns on them. The colours still follow
+  light, as only wither skeletons, skeletons and endermen need the dark.
 - **Share MiniHUD shapes too.** The shared shape carries MiniHUD's own kind of shape and the height
   it sits at: someone with MiniHUD gets the same shape in their world, and someone without it still
   gets the outline on their map.
@@ -127,7 +133,7 @@ Client-side only: it does nothing on the server and works on any server you join
 |:--|:--|
 | Add a shape | Right-click the world map → **Add shape here** |
 | Add one on a waypoint | Right-click the waypoint → **Add shape here** |
-| Add one on a structure or BlueMap marker | Right-click it → **Add shape here** (with Sky's Structure Map or Sky's Map Exposer) |
+| Add one on a BlueMap marker | Right-click it → **Add shape here** (with Sky's Map Exposer) |
 | See all your shapes | The **Shapes** panel on the world map, or the full list from a key or the settings |
 | Edit or delete one | Right-click its outline or its label, or use the list |
 | Hide one for now | Right-click it → **Hide** (or a choice of where, for a MiniHUD shape), then **Show** it from the list |
