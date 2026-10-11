@@ -125,6 +125,15 @@ class MiniHudTest {
         assertEquals(10.5, sphere.getAsJsonArray("center")[0].asDouble)
         assertEquals(70.0, sphere.getAsJsonArray("center")[1].asDouble)
 
+        // A shared sphere is made as a sphere, not as a circle turned into one afterwards: that kept the
+        // circle's height (so MiniHUD's sphere, which drops it, seemed the wrong size) and its base.
+        val shared = json(Shape.Type.CIRCLE, radius = 128.0, form = MiniHudGeometry.formOfType("sphere_blocky"))
+        assertTrue(MiniHudGeometry.retype(shared, "sphere_blocky"))
+        assertFalse(shared.has("height"))
+        assertEquals(70.0, shared.getAsJsonArray("center")[1].asDouble)
+        val took = shared.deepCopy().apply { remove("enabled") }
+        assertTrue(MiniHudGeometry.tookSize(shared, took))
+
         assertEquals("square", json(Shape.Type.SQUARE, radius = 16.0).get("type").asString)
         assertEquals("rhombus", json(Shape.Type.RHOMBUS, radius = 16.0).get("type").asString)
         assertEquals("ellipsoid_spawn", json(Shape.Type.ELLIPSE, w = 20.0, l = 10.0).get("type").asString)

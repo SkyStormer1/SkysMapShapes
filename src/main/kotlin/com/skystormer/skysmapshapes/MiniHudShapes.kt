@@ -227,13 +227,16 @@ object MiniHudShapes {
      */
     internal fun create(shape: Shape, y: Int, typeId: String? = null, form: MiniHudGeometry.Form? = null): String? {
         val api = api ?: return "This version of MiniHUD could not be read."
-        // Checked as the kind MiniHUD will really make, which for a shared shape may be another form.
-        MiniHudGeometry.whyTooBig(shape, typeId?.let { MiniHudGeometry.formOfType(it) } ?: form)?.let { return it }
+        // Checked and made as the kind MiniHUD will really make, which for a shared shape may be
+        // another form: a shared sphere made as a circle and then turned into one kept the circle's
+        // height and base, so MiniHUD's sphere seemed the wrong size and stood 128 blocks low.
+        val asForm = typeId?.let { MiniHudGeometry.formOfType(it) } ?: form
+        MiniHudGeometry.whyTooBig(shape, asForm)?.let { return it }
         val here = Dimensions.ofPlayer() == shape.dimension
         val file = if (here) null else fileFor(shape.dimension)
             ?: return "MiniHUD's files for this world could not be found, so it stays on this mod's map."
         return try {
-            val json = MiniHudGeometry.toMiniHudJson(shape, y, form) ?: return "MiniHUD has no shape like that."
+            val json = MiniHudGeometry.toMiniHudJson(shape, y, asForm) ?: return "MiniHUD has no shape like that."
             // A shared MiniHUD shape is made again as the kind it was, when that kind fits these fields.
             if (typeId != null) MiniHudGeometry.retype(json, typeId)
             val kind = json.get("type").asString
