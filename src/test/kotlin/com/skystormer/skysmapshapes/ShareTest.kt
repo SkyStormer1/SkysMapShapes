@@ -59,6 +59,40 @@ class ShareTest {
     }
 
     @Test
+    fun aMiniHudShapeCarriesItsOwnSizes() {
+        // A cylinder 32 high and a cone pointing down: neither fits in a flat outline, and both
+        // came out wrong on the other end before (256 high; a box from bedrock to the sky).
+        val cases = listOf(
+            "circle" to """{"type":"circle","center":[10.5,70.0,-19.5],"radius":40.0,"height":32,"main_axis":"UP"}""",
+            "cone" to """{"type":"cone","origin_x":10,"origin_y":60,"origin_z":-19,"bottom_radius":40,"top_radius":0,"height":32,"direction":"down"}""",
+            "centered_box" to """{"type":"centered_box","center":[10.5,70.0,-19.5],"width":16.0,"height":32.0,"depth":16.0,"corner1":[2.5,54.0,-27.5],"corner2":[18.5,86.0,-11.5]}""",
+            "despawn_sphere" to """{"type":"despawn_sphere","center":[10.5,70.0,-19.5],"radius":40.0,"margin":1.5,"snap":"center"}""",
+        )
+        for ((typeId, text) in cases) {
+            val json = JsonParser.parseString(text).asJsonObject
+            val sent = MiniHudShapes.parse(json, "minecraft:overworld")!!
+            val got = readBack(sent)
+            assertEquals(typeId, got.miniHudType)
+            assertEquals(MiniHudGeometry.sizes(json), got.miniHudSizes, typeId)
+            // And through the add button's code.
+            assertEquals(MiniHudGeometry.sizes(json), ShapeShare.decode(ShapeShare.encode(got))!!.miniHudSizes, typeId)
+            // Made again from them, MiniHUD is asked for the same sizes as the shape shared.
+            val made = MiniHudGeometry.forMiniHud(got.shape, got.y!!, got.miniHudType, null, got.miniHudSizes)!!
+            assertEquals(typeId, made.get("type").asString)
+            assertEquals(MiniHudGeometry.sizes(json), MiniHudGeometry.sizes(made), typeId)
+        }
+    }
+
+    @Test
+    fun aLineFromBeforeSizesWereSharedIsStillRead() {
+        val line = "Map shape Circle: circle r128 at -321 179 (Overworld) · red · MiniHUD sphere_blocky y 8"
+        val got = ShapeShare.readLine(line)!!.second
+        assertEquals("sphere_blocky", got.miniHudType)
+        assertEquals(8, got.y)
+        assertNull(got.miniHudSizes)
+    }
+
+    @Test
     fun aColourSetByHandIsSentAsItsCode() {
         val sent = shape().copy(colour = Colours.parse("#123456")!!)
         assertTrue(ShapeShare.message(sent).contains("· #123456"))
@@ -87,7 +121,7 @@ class ShareTest {
             "minecraft:the_nether",
         )!!
         val line = ShapeShare.message(fromMiniHud)
-        assertTrue(line.endsWith("· MiniHUD despawn_sphere y 42"), line)
+        assertTrue(line.endsWith("· MiniHUD despawn_sphere y 42 center=64.5,42.0,-128.5 radius=128.0"), line)
         val got = ShapeShare.readLine(line)!!.second
         // Someone with MiniHUD can have the same kind of shape, at the same height, in their world.
         assertEquals("despawn_sphere", got.miniHudType)

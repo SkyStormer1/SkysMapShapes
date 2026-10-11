@@ -39,6 +39,8 @@ class ShapeEditScreen private constructor(
     /** How a shared shape was made in MiniHUD, when it was: its kind and the height it sat at. */
     private val sharedMiniHudType: String? = null,
     private val sharedY: Int? = null,
+    /** The shared MiniHUD shape's own sizes, for making the same one again ([MiniHudGeometry.forMiniHud]). */
+    private val sharedSizes: com.google.gson.JsonObject? = null,
 ) : Screen(Component.literal(if (existing == null) "Add a shape" else "Edit shape")) {
 
     /** Where the fields start from: the shape being edited, or one being copied. */
@@ -371,7 +373,9 @@ class ShapeEditScreen private constructor(
                 lagWarned = asked
                 return show("$warning Press Save again to make it anyway.")
             }
-            MiniHudShapes.create(shape, sharedY ?: MapMenus.miniHudY(shape), sharedMiniHudType, form)?.let { return show(it.substringBefore(", so it stays")) }
+            // The shared sizes hold only while the outline is still the one shared.
+            val sizes = sharedSizes?.takeIf { from != null && sameOutline(shape, from) }
+            MiniHudShapes.create(shape, sharedY ?: MapMenus.miniHudY(shape), sharedMiniHudType, form, sizes)?.let { return show(it.substringBefore(", so it stays")) }
             MapMenus.say("Made ${shape.name} in MiniHUD" + (form?.let { " as a " + MiniHudGeometry.formName(type, it).lowercase() } ?: "") +
                 if (Dimensions.ofPlayer() == dimension) "" else ", there when you next go to the ${Dimensions.name(dimension)}")
         } else {
@@ -379,6 +383,9 @@ class ShapeEditScreen private constructor(
         }
         minecraft.gui.setScreen(parent)
     }
+
+    private fun sameOutline(a: Shape, b: Shape) = a.type == b.type && a.x == b.x && a.z == b.z && a.radius == b.radius &&
+        a.width == b.width && a.length == b.length && a.anchor == b.anchor
 
     private fun size(text: String): Double? = text.trim().toDoubleOrNull()?.takeIf { it > 0 && it <= MAX_SIZE }
 
@@ -407,7 +414,7 @@ class ShapeEditScreen private constructor(
         /** A shape someone shared in chat, to look at before it is kept. */
         fun forShared(parent: Screen?, shared: ShapeShare.Shared) = ShapeEditScreen(
             parent, null, shared.shape.dimension, shared.shape.x, shared.shape.z, shared.shape.label,
-            shared.shape, shared.miniHudType, shared.y,
+            shared.shape, shared.miniHudType, shared.y, shared.miniHudSizes,
         )
 
         fun forNew(parent: Screen?, dimension: String, x: Int, z: Int, label: String, y: Int? = null) =

@@ -21,7 +21,8 @@ import net.minecraft.network.chat.HoverEvent
  * The line carries the shape's own dimension, so it always lands on the right map: a Nether shape
  * shared while the other player is in the Overworld is added to their Nether map, at the Nether
  * coordinates it had here. Nothing is scaled and nothing is added without the other player
- * clicking. A MiniHUD shape also carries MiniHUD's own kind of shape and the height it sits at.
+ * clicking. A MiniHUD shape also carries MiniHUD's own kind of shape, the height it sits at and
+ * its own sizes, so someone with MiniHUD gets exactly the same shape in their world.
  */
 object ShapeShare {
 
@@ -37,8 +38,12 @@ object ShapeShare {
     private val encoder: Base64.Encoder = Base64.getUrlEncoder().withoutPadding()
     private val decoder: Base64.Decoder = Base64.getUrlDecoder()
 
-    /** A shared shape: the outline for the map, and what MiniHUD needs to make it in the world. */
-    class Shared(val shape: Shape, val miniHudType: String?, val y: Int?)
+    /**
+     * A shared shape: the outline for the map, and what MiniHUD needs to make it in the world: its
+     * kind, the height it sits at, and its own sizes ([MiniHudGeometry.sizes]), without which a
+     * cylinder came out 256 high, a box from the bottom of the world to the top, a pyramid a box.
+     */
+    class Shared(val shape: Shape, val miniHudType: String?, val y: Int?, val miniHudSizes: JsonObject? = null)
 
     /** The outline as one of our own shapes; null for one that cannot be shared, such as a line. */
     fun asShape(shape: MapShape): Shape? = when (shape) {
@@ -50,11 +55,17 @@ object ShapeShare {
     /** What [shape] is shared as: its outline, and MiniHUD's kind and height when it came from there. */
     fun sharedOf(shape: MapShape): Shared? {
         val own = asShape(shape) ?: return null
-        return if (shape is MiniHudShape) Shared(own, shape.typeId, shape.centreY) else Shared(own, null, own.y)
+        return if (shape is MiniHudShape) Shared(own, shape.typeId, shape.centreY, shape.sizes) else Shared(own, null, own.y)
     }
 
-    /** The chat line for [shape]: every word of it readable. Empty for one that cannot be shared. */
-    fun message(shape: MapShape): String = sharedOf(shape)?.let(::line) ?: ""
+    /**
+     * The chat line for [shape]: every word of it readable. Empty for one that cannot be shared.
+     * Without MiniHUD's sizes when they would make it too long for chat.
+     */
+    fun message(shape: MapShape): String {
+        val shared = sharedOf(shape) ?: return ""
+        return line(shared).takeIf { it.length <= MAX_CHAT } ?: line(Shared(shared.shape, shared.miniHudType, shared.y))
+    }
 
     private fun line(shared: Shared): String {
         val shape = shared.shape
@@ -74,6 +85,7 @@ object ShapeShare {
         if (shared.miniHudType != null) {
             text.append(SEP).append("MiniHUD ").append(shared.miniHudType)
             shared.y?.let { text.append(" y ").append(it) }
+            shared.miniHudSizes?.let { text.append(' ').append(MiniHudGeometry.sizesText(it)) }
         } else if (shared.y != null) {
             text.append(SEP).append("y ").append(shared.y)
         }
@@ -154,6 +166,7 @@ object ShapeShare {
         var lineWidth = Config.DEFAULT_LINE_WIDTH
         var miniHudType: String? = null
         var y: Int? = null
+        var sizes: JsonObject? = null
         for (part in extras.split(SEP.trim()).map { it.trim() }.filter { it.isNotEmpty() }) {
             when {
                 part == "filled" -> fill = true
@@ -164,6 +177,7 @@ object ShapeShare {
                     val words = part.removePrefix("MiniHUD ").split(' ')
                     miniHudType = words.firstOrNull()?.takeIf { it.isNotBlank() }
                     if (words.size >= 3 && words[1] == "y") y = words[2].toIntOrNull()
+                    sizes = MiniHudGeometry.parseSizes(words.drop(1))
                 }
                 part.startsWith("y ") -> y = part.removePrefix("y ").trim().toIntOrNull()
                 part.startsWith("#") -> Colours.parse(part)?.let { colour = it }
@@ -189,7 +203,7 @@ object ShapeShare {
         if (!shape.isValid()) return null
         // What to show beside the button: the line up to its dimension, without the extras.
         val shown = text.substring(0, text.length - extras.length).trimEnd()
-        return shown to Shared(shape, miniHudType, y)
+        return shown to Shared(shape, miniHudType, y, sizes)
     }
 
     /** The code the add button's command carries. It never goes into chat. */
@@ -198,6 +212,7 @@ object ShapeShare {
         val json = JsonObject()
         shared.miniHudType?.let { json.addProperty("m", it) }
         shared.y?.let { json.addProperty("y", it) }
+        shared.miniHudSizes?.let { json.add("h", it) }
         json.addProperty("l", shape.label)
         json.addProperty("d", shape.dimension)
         json.addProperty("t", shape.type.name.lowercase())
@@ -226,6 +241,7 @@ object ShapeShare {
         Shared(
             miniHudType = json.get("m")?.asString,
             y = y,
+            miniHudSizes = json.get("h")?.takeIf { it.isJsonObject }?.asJsonObject,
             shape = Shape(
                 label = json.get("l")?.asString ?: "",
                 dimension = json.get("d").asString,

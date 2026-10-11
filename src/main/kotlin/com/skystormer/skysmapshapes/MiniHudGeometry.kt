@@ -444,6 +444,61 @@ internal object MiniHudGeometry {
         "origin_x", "origin_y", "origin_z", "bottom_radius", "top_radius", "direction",
     )
 
+    /**
+     * Everything that makes a MiniHUD shape the size and shape it is, which a flat outline cannot
+     * hold: its height and which way it stands, a box's top and bottom (a centred one's width and
+     * depth), a cone's base and top, a spawn sphere's margin, how its centre snaps, and the limits
+     * raised for a big one.
+     */
+    private val SHARED_KEYS = SIZE_KEYS - listOf("start", "end") + listOf("width", "depth", "margin", "snap", "max_radius", "max_height")
+
+    /** [json]'s sizes ([SHARED_KEYS]), to share with a shape so the other end makes the same one. */
+    fun sizes(json: JsonObject): JsonObject = JsonObject().also { out ->
+        for (key in SHARED_KEYS) json.get(key)?.let { out.add(key, it.deepCopy()) }
+    }
+
+    /** [sizes] as words for a line of chat: `height=32 main_axis=UP center=10.5,70,-19.5`. */
+    fun sizesText(sizes: JsonObject): String =
+        sizes.entrySet().joinToString(" ") { (key, value) -> "$key=${text(value).replace(" ", "")}" }
+
+    /** Sizes read back from [words] as [sizesText] writes them; words of anything else are left out. */
+    fun parseSizes(words: List<String>): JsonObject? {
+        val out = JsonObject()
+        for (word in words) {
+            val key = word.substringBefore('=', "")
+            val value = word.substringAfter('=', "")
+            if (key !in SHARED_KEYS || value.isEmpty()) continue
+            val parts = value.split(',')
+            when {
+                parts.size == 3 && parts.all { it.toDoubleOrNull() != null } ->
+                    out.add(key, JsonArray().apply { parts.forEach { add(it.toDouble()) } })
+                value.toDoubleOrNull() != null -> out.addProperty(key, value.toDouble())
+                value.toBooleanStrictOrNull() != null -> out.addProperty(key, value.toBooleanStrict())
+                else -> out.addProperty(key, value)
+            }
+        }
+        return out.takeIf { it.size() > 0 }
+    }
+
+    /**
+     * What MiniHUD is asked to make for [shape] at height [y]: as [typeId] when it was shared as
+     * one of MiniHUD's kinds, with its shared [sizes] when there are some, so it comes out the
+     * same as the one shared; else stood up as [form].
+     */
+    fun forMiniHud(shape: Shape, y: Int, typeId: String?, form: Form?, sizes: JsonObject?): JsonObject? {
+        val json = toMiniHudJson(shape, y, typeId?.let { formOfType(it) } ?: form) ?: return null
+        if (typeId == null) return json
+        if (sizes == null) {
+            retype(json, typeId)
+            return json
+        }
+        for (key in SHARED_KEYS) json.remove(key)
+        for ((key, value) in sizes.entrySet()) json.add(key, value.deepCopy())
+        json.remove("type")
+        json.addProperty("type", typeId)
+        return json
+    }
+
     /** What makes a shape where and how big it is, as text, for an id that survives re-reading. */
     fun identity(json: JsonObject): String =
         SIZE_KEYS.mapNotNull { key -> json.get(key)?.let { value -> "$key=${text(value)}" } }.joinToString(";")

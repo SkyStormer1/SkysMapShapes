@@ -208,7 +208,7 @@ object MiniHudShapes {
         // The same shape keeps the same id while it is not changed, so hiding it here sticks.
         val id = "minihud:" + dimension + ":" + type + ":" + MiniHudGeometry.identity(json)
         return MiniHudShape(id, label, dimension, colour, geometry, type, enabled, MiniHudGeometry.heightOf(json), handle, file,
-            MiniHudGeometry.volumeOf(type, json))
+            MiniHudGeometry.volumeOf(type, json), MiniHudGeometry.sizes(json))
     }
 
     /**
@@ -225,7 +225,7 @@ object MiniHudShapes {
      * MiniHUD quietly drops a size over its limits, so the shape is read back before it is added,
      * and one that came out a different size is not added at all.
      */
-    internal fun create(shape: Shape, y: Int, typeId: String? = null, form: MiniHudGeometry.Form? = null): String? {
+    internal fun create(shape: Shape, y: Int, typeId: String? = null, form: MiniHudGeometry.Form? = null, sizes: JsonObject? = null): String? {
         val api = api ?: return "This version of MiniHUD could not be read."
         // Checked and made as the kind MiniHUD will really make, which for a shared shape may be
         // another form: a shared sphere made as a circle and then turned into one kept the circle's
@@ -236,9 +236,8 @@ object MiniHudShapes {
         val file = if (here) null else fileFor(shape.dimension)
             ?: return "MiniHUD's files for this world could not be found, so it stays on this mod's map."
         return try {
-            val json = MiniHudGeometry.toMiniHudJson(shape, y, asForm) ?: return "MiniHUD has no shape like that."
-            // A shared MiniHUD shape is made again as the kind it was, when that kind fits these fields.
-            if (typeId != null) MiniHudGeometry.retype(json, typeId)
+            // A shared MiniHUD shape is made again as the kind it was, at the sizes it had.
+            val json = MiniHudGeometry.forMiniHud(shape, y, typeId, form, sizes) ?: return "MiniHUD has no shape like that."
             val kind = json.get("type").asString
             val typeClass = Class.forName("fi.dy.masa.minihud.renderer.shapes.ShapeType")
             val type = typeClass.getMethod("fromString", String::class.java).invoke(null, kind)

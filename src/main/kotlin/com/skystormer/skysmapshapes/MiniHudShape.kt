@@ -20,6 +20,8 @@ class MiniHudShape(
     val file: Path? = null,
     /** The space it takes up in the world; null for one with no inside, such as a line. */
     val volume: Volume? = null,
+    /** MiniHUD's own sizes for it ([MiniHudGeometry.sizes]), shared with it so the other end makes the same shape. */
+    val sizes: com.google.gson.JsonObject? = null,
 ) : MapShape {
     /** Whether MiniHUD's editor can be opened on it from here: only in the dimension you are in. */
     val editable: Boolean get() = handle != null
