@@ -90,9 +90,10 @@ MiniHUD is optional. When it is installed, this mod and MiniHUD work as one:
   mobs spawn (nether wastes, crimson forest, soul sand valley, basalt deltas), and red nether wart
   blocks do not count in a crimson forest, where nothing spawns on them. The colours still follow
   light, as only wither skeletons, skeletons and endermen need the dark.
-- **Share MiniHUD shapes too.** The shared shape carries MiniHUD's own kind of shape and the height
-  it sits at: someone with MiniHUD gets the same shape in their world, and someone without it still
-  gets the outline on their map.
+- **Share MiniHUD shapes too.** The shared shape carries MiniHUD's own kind of shape, the height it
+  sits at and its sizes (how tall, which way it stands, a box's top and bottom, a spawn sphere's
+  margin): someone with MiniHUD gets exactly the same shape in their world, and someone without it
+  still gets the outline on their map.
 
 Map shapes are flat, so one made in MiniHUD is given a height, at your feet (or height 64 for
 another dimension), and you choose how it stands up:
