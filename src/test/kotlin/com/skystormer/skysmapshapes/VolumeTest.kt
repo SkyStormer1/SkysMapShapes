@@ -16,19 +16,36 @@ class VolumeTest {
 
     @Test
     fun sphereIsRoundInEveryDirection() {
+        // Snapped to the middle of its block across, but to its bottom up and down, as MiniHUD snaps it.
         val sphere = volume("""{"type":"sphere_blocky","snap":"center","center":[0.2,64.7,0.9],"radius":10.0}""")
         assertTrue(sphere.contains(0, 64, 0))
-        assertTrue(sphere.contains(10, 64, 0))
-        assertTrue(sphere.contains(0, 74, 0))
-        assertFalse(sphere.contains(0, 75, 0))
+        assertTrue(sphere.contains(9, 64, 0))
+        assertFalse(sphere.contains(10, 64, 0)) // its middle is 10 across and half a block up: just out
+        assertTrue(sphere.contains(0, 73, 0))
+        assertFalse(sphere.contains(0, 74, 0))
+        assertTrue(sphere.contains(0, 54, 0))
+        assertFalse(sphere.contains(0, 53, 0))
         assertFalse(sphere.contains(8, 72, 0)) // inside the column, outside the ball
     }
 
     @Test
-    fun spawnSphereMarginAddsToItsRadius() {
+    fun spawnSphereIsMeasuredFromItsMarginsSquare() {
+        // MiniHUD measures from the top of each block to a square the margin wide around the
+        // centre: not a sphere the margin bigger, which reached a block or two too high.
         val sphere = volume("""{"type":"despawn_sphere","snap":"center","center":[0.5,64.0,0.5],"radius":128.0,"margin":3.0}""")
         assertTrue(sphere.contains(130, 64, 0))
         assertFalse(sphere.contains(132, 64, 0))
+        assertTrue(sphere.contains(0, 190, 0))
+        assertFalse(sphere.contains(0, 192, 0))
+    }
+
+    @Test
+    fun clippedSpawnSphereIsTrimmedTopAndBottom() {
+        val sphere = volume("""{"type":"clipped_spawn_sphere_y","snap":"center","center":[0.5,64.0,0.5],"radius":24.0,"margin":0.0,"top_trim":3.0,"bottom_trim":5.0}""")
+        assertTrue(sphere.contains(0, 84, 0))
+        assertFalse(sphere.contains(0, 85, 0)) // above 64 + 24 - 3
+        assertTrue(sphere.contains(0, 45, 0))
+        assertFalse(sphere.contains(0, 44, 0)) // below 64 - 24 + 5
     }
 
     @Test
@@ -47,7 +64,11 @@ class VolumeTest {
         assertTrue(prism.contains(-3, 64, 0))
         assertFalse(prism.contains(-4, 64, 0))
         assertFalse(prism.contains(1, 64, 0))
-        assertTrue(prism.contains(-1, 66, 0))
+        // Across it, measured from the centre snapped to its block's bottom, as MiniHUD snaps it.
+        assertTrue(prism.contains(-1, 65, 0))
+        assertFalse(prism.contains(-1, 66, 0))
+        assertTrue(prism.contains(-1, 62, 0))
+        assertFalse(prism.contains(-1, 61, 0))
     }
 
     @Test
@@ -57,6 +78,16 @@ class VolumeTest {
         assertFalse(cone.contains(10, 5, 0))
         assertTrue(cone.contains(0, 10, 0))
         assertFalse(cone.contains(1, 10, 0))
+        // MiniHUD lays one layer more than its height, down to the top radius.
+        assertTrue(cone.contains(0, 11, 0))
+        assertFalse(cone.contains(0, 12, 0))
+    }
+
+    @Test
+    fun octagonPyramidCutsItsCornersAtHalfAsMuchAgain() {
+        val octagon = volume("""{"type":"octagon_pyramid","origin_x":0,"origin_y":0,"origin_z":0,"bottom_radius":10,"top_radius":10,"height":2,"direction":"up"}""")
+        assertTrue(octagon.contains(10, 0, 5))
+        assertFalse(octagon.contains(10, 0, 6))
     }
 
     @Test

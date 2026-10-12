@@ -67,26 +67,36 @@ internal object MiniHudGeometry {
                 "octagon_pyramid" -> Volume.Section.OCTAGON
                 else -> Volume.Section.CIRCLE
             }
-            return standing(json.get("direction")?.asString?.uppercase() ?: "UP", origin.map { Math.floor(it) + 0.5 }.toDoubleArray(), section,
-                json.get("bottom_radius")?.asDouble ?: 0.0, json.get("top_radius")?.asDouble ?: 0.0, json.get("height")?.asInt ?: 1)
+            return Volume.Tapered(
+                Math.floor(origin[0]).toInt(), Math.floor(origin[1]).toInt(), Math.floor(origin[2]).toInt(),
+                json.get("direction")?.asString?.uppercase() ?: "UP", section,
+                json.get("bottom_radius")?.asDouble ?: 0.0, json.get("top_radius")?.asDouble ?: 0.0, json.get("height")?.asInt ?: 1,
+            )
         }
         val centre = vec(json, "center")?.let { snapped(it, json.get("snap")?.asString) } ?: return null
         val radius = json.get("radius")?.asDouble ?: return null
         if (type == "ellipsoid_spawn") {
             return Volume.Ellipsoid(centre[0], centre[1], centre[2], radius, json.get("radius_y")?.asDouble ?: radius, json.get("radius_z")?.asDouble ?: radius)
         }
-        if (type in SPHERES) return Volume.Ellipsoid(centre[0], centre[1], centre[2], radius + (json.get("margin")?.asDouble ?: 0.0))
+        if (type == "sphere_blocky") return Volume.Ellipsoid(centre[0], centre[1], centre[2], radius)
+        if (type in SPHERES) {
+            val margin = json.get("margin")?.asDouble ?: 0.0
+            if (type != "clipped_spawn_sphere_y") return Volume.SpawnSphere(centre[0], centre[1], centre[2], radius, margin)
+            val bottom = centre[1] - (radius - (json.get("bottom_trim")?.asDouble ?: 0.0))
+            val top = centre[1] + (radius - (json.get("top_trim")?.asDouble ?: 0.0))
+            return Volume.SpawnSphere(centre[0], centre[1], centre[2], radius, margin, bottom, top)
+        }
         val section = when (type) {
             "square" -> Volume.Section.SQUARE
             "rhombus" -> Volume.Section.RHOMBUS
             "circle" -> Volume.Section.CIRCLE
             else -> return null
         }
-        return standing(json.get("main_axis")?.asString ?: "UP", centre, section, radius, radius, json.get("height")?.asInt ?: 1)
+        return standing(json.get("main_axis")?.asString ?: "UP", centre, section, radius, json.get("height")?.asInt ?: 1)
     }
 
     /** A cross-section stood [height] blocks along [direction] from the block holding [centre]. */
-    private fun standing(direction: String, centre: DoubleArray, section: Volume.Section, startRadius: Double, endRadius: Double, height: Int): Volume {
+    private fun standing(direction: String, centre: DoubleArray, section: Volume.Section, radius: Double, height: Int): Volume {
         val (axis, step) = when (direction) {
             "DOWN" -> Volume.Axis.Y to -1
             "NORTH" -> Volume.Axis.Z to -1
@@ -100,12 +110,16 @@ internal object MiniHudGeometry {
             Volume.Axis.Y -> Triple(centre[1], centre[0], centre[2])
             Volume.Axis.Z -> Triple(centre[2], centre[0], centre[1])
         }
-        return Volume.Extruded(axis, Math.floor(along).toInt(), step, maxOf(1, height), u, v, section, startRadius, endRadius)
+        return Volume.Extruded(axis, Math.floor(along).toInt(), step, maxOf(1, height), u, v, section, radius)
     }
 
-    /** [centre] moved as MiniHUD's block snap moves it: to the middle or the corner of its block. */
+    /**
+     * [centre] moved as MiniHUD's block snap moves it (`getBlockSnappedPosition`): to the middle of
+     * its block across but its bottom up and down, or to its corner. Moved to the middle up and
+     * down as well, a sphere's light levels sat half a block above MiniHUD's own sphere.
+     */
     private fun snapped(centre: DoubleArray, snap: String?): DoubleArray = when (snap) {
-        "center" -> DoubleArray(3) { Math.floor(centre[it]) + 0.5 }
+        "center" -> doubleArrayOf(Math.floor(centre[0]) + 0.5, Math.floor(centre[1]), Math.floor(centre[2]) + 0.5)
         "corner" -> DoubleArray(3) { Math.floor(centre[it]) }
         else -> centre
     }
