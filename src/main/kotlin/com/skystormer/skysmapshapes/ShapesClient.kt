@@ -26,7 +26,7 @@ object ShapesClient : ClientModInitializer {
     /** Opens the shapes list. Unbound until you pick a key in Controls. */
     private val listKey = KeyMapping(
         "key.skysmapshapes.list",
-        InputConstants.Type.KEYSYM,
+        InputConstants.Type.KEYBOARD,
         InputConstants.UNKNOWN.value,
         KeyMapping.Category.register(Identifier.fromNamespaceAndPath("skysmapshapes", "shapes")),
     )
