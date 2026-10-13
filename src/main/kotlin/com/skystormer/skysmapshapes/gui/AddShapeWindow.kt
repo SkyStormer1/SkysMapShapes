@@ -645,10 +645,10 @@ object AddShapeWindow {
             // The screen hands a left click to the panel (or to another panel in front of it),
             // which passes it on to its boxes in [clickInside]. Nothing else reaches the map.
             button = event.buttonInfo()
-            return event.button() == 0
+            return event.button() == InputConstants.MOUSE_BUTTON_LEFT
         }
         if (Screens.getWidgets(s).any { it.visible && it.isMouseOver(mx, my) }) return true
-        if (event.button() != 0) return false
+        if (event.button() != InputConstants.MOUSE_BUTTON_LEFT) return false
         if (tracking) {
             tracking = false
             return false
@@ -968,7 +968,7 @@ object AddShapeWindow {
         }
 
         override fun mouseClicked(event: MouseButtonEvent, doubleClick: Boolean): Boolean {
-            if (!active || !visible || event.button() != 0 || !isMouseOver(event.x(), event.y())) return false
+            if (!active || !visible || event.button() != InputConstants.MOUSE_BUTTON_LEFT || !isMouseOver(event.x(), event.y())) return false
             action()
             return true
         }

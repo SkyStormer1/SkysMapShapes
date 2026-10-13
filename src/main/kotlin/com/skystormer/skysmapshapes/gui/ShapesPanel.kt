@@ -77,7 +77,7 @@ object ShapesPanel {
                 open.click(s, event.x(), event.y())
                 return@register false
             }
-            if (event.button() == 1 && panel.visible && panel.isMouseOver(event.x(), event.y())) {
+            if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT && panel.visible && panel.isMouseOver(event.x(), event.y())) {
                 panel.shapeAt(event.x(), event.y())?.let { popup = Popup.of(s, it, event.x().toInt(), event.y().toInt()) }
                 return@register false
             }
