@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <b><a href="https://github.com/SkyStormer1/SkysMapShapes/releases/latest">⬇ Download the mod jar</a></b> · Minecraft 26.2 · Fabric · client-side
+  <b><a href="https://github.com/SkyStormer1/SkysMapShapes/releases/latest">⬇ Download the mod jar</a></b> · Minecraft 26.3 · Fabric · client-side
 </p>
 
 A client-side Fabric mod that draws labelled circles, squares and other shapes on **Xaero's World
@@ -115,7 +115,7 @@ that MiniHUD drawing it may slow the game.
 
 ## Installing
 
-1. [Fabric Loader](https://fabricmc.net/use/) for Minecraft 26.2.
+1. [Fabric Loader](https://fabricmc.net/use/) for Minecraft 26.3.
 2. [Fabric API](https://modrinth.com/mod/fabric-api) and
    [Fabric Language Kotlin](https://modrinth.com/mod/fabric-language-kotlin).
 3. [Xaero's World Map](https://modrinth.com/mod/xaeros-world-map).
