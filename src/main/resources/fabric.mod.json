@@ -32,7 +32,8 @@
   "mixins": [
     "skysmapshapes.mixins.json",
     "skysmapshapes.minimap.mixins.json",
-    "skysmapshapes.minihud.mixins.json"
+    "skysmapshapes.minihud.mixins.json",
+    "skysmapshapes.litematica.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=${loader_version}",

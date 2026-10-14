@@ -13,6 +13,36 @@ object SpawnOutlines {
     /** A straight edge on the floor of layer [y], from corner ([x1], [z1]) to ([x2], [z2]). */
     data class Edge(val y: Int, val x1: Int, val z1: Int, val x2: Int, val z2: Int)
 
+    /** A rectangle of spots on the floor of layer [y], from corner ([x1], [z1]) to ([x2], [z2]), the far corner exclusive. */
+    data class Rect(val y: Int, val x1: Int, val z1: Int, val x2: Int, val z2: Int)
+
+    /**
+     * [spots] (packed block positions) covered by as few rectangles as a simple sweep finds: each
+     * row of touching spots along x becomes a strip, and a strip exactly under the one in the row
+     * before grows that one instead. A 10 by 10 patch is one rectangle, not a hundred.
+     */
+    fun rectangles(spots: LongArray): List<Rect> {
+        // Strips along x, by layer and row: (y, z) to the sorted x of each spot.
+        val rows = HashMap<Pair<Int, Int>, MutableList<Int>>()
+        for (spot in spots) rows.getOrPut(BlockPos.getY(spot) to BlockPos.getZ(spot)) { ArrayList() } += BlockPos.getX(spot)
+        val out = ArrayList<Rect>()
+        // Open rectangles by (y, x1, x2), each with the row it has reached so far.
+        val open = HashMap<Triple<Int, Int, Int>, Rect>()
+        for ((key, xs) in rows.entries.sortedWith(compareBy({ it.key.first }, { it.key.second }))) {
+            val (y, z) = key
+            runs(xs) { from, to ->
+                val id = Triple(y, from, to)
+                val above = open[id]
+                open[id] = if (above != null && above.z2 == z) above.copy(z2 = z + 1) else {
+                    above?.let(out::add)
+                    Rect(y, from, z, to, z + 1)
+                }
+            }
+        }
+        out += open.values
+        return out
+    }
+
     /** The outer edges of [spots] (packed block positions), joined into the fewest straight lines. */
     fun edges(spots: LongArray): List<Edge> {
         val set = LongOpenHashSet(spots)

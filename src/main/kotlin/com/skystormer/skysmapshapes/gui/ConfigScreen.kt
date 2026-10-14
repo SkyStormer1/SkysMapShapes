@@ -41,6 +41,9 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
     private var spawnProofEverywhere = Config.spawnProofEverywhere
     private var spawnProofRange = Config.spawnProofRange
     private var spawnProofRenderThrough = Config.spawnProofRenderThrough
+    private var spawnProofColour = Config.spawnProofColour
+    private var spawnProofOpacity = Config.spawnProofOpacity
+    private var spawnProofHeight = Config.spawnProofHeight
     private var fillOpacity = Config.fillOpacity
     private val presets = MutableList(Config.MAX_PRESETS) { i ->
         Config.presets.getOrNull(i)?.let { PresetDraft(it.name, Shape.number(it.radius), it.colour) }
@@ -68,6 +71,9 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         spawnProofEverywhere = false
         spawnProofRange = Config.MAX_SPAWN_PROOF_RANGE
         spawnProofRenderThrough = true
+        spawnProofColour = Colours.AQUA.argb
+        spawnProofOpacity = 0.25f
+        spawnProofHeight = 2
         thicknessScale = 1f
         fillOpacity = 0.15f
     }
@@ -145,8 +151,25 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
                 ))).build())
             y += ROW + GAP
             addRenderableWidget(toggle(left, y, WIDTH, "Spawn proofing: show through blocks", spawnProofRenderThrough,
-                "Each patch of spots still to cover gets one blue outline drawn through blocks, so you can see spots behind walls. " +
+                "Each patch of spots still to cover gets one outline, in the overlay colour, drawn through blocks, so you can see spots behind walls. " +
                     "Only spawn proofing's spots: Litematica's settings and your other placements are left alone.") { spawnProofRenderThrough = it })
+            y += ROW + GAP
+            // The overlay on the spots, drawn by this mod instead of Litematica's, so it can be toned down.
+            val overlayTip = "Spawn proofing's spots get this mod's overlay instead of Litematica's: "
+            addRenderableWidget(
+                CycleButton.builder<Int>({ Component.literal(Colours.name(it)).withStyle { s -> s.withColor(it and 0xFFFFFF) } }, spawnProofColour)
+                    .withValues(Colours.entries.map { it.argb }.let { if (spawnProofColour in it) it else listOf(spawnProofColour) + it })
+                    .create(left, y, third, ROW, Component.literal("Overlay")) { _, value -> spawnProofColour = value }
+                    .also { it.setTooltip(Tooltip.create(Component.literal(overlayTip +
+                        "its colour, also used for the through-blocks outline. Your other Litematica placements keep Litematica's colours."))) }
+            )
+            addRenderableWidget(Slider(left + third + GAP, y, third, spawnProofOpacity.toDouble(),
+                { if (it <= 0.0) "Opacity: off" else "Opacity ${(lerp(it, 0f, 1f, 0.05f) * 100).roundToInt()}%" },
+                overlayTip + "how solid it is. At off only Litematica's ghost blocks show where to place.") { spawnProofOpacity = lerp(it, 0f, 1f, 0.05f) })
+            addRenderableWidget(Slider(left + (third + GAP) * 2, y, WIDTH - (third + GAP) * 2,
+                toSlider(spawnProofHeight.toFloat(), Config.MIN_SPAWN_PROOF_HEIGHT.toFloat(), Config.MAX_SPAWN_PROOF_HEIGHT.toFloat()),
+                { heightText(heightOf(it)) },
+                overlayTip + "how tall it is, from a thin sheet on the floor up to a whole block.") { spawnProofHeight = heightOf(it) })
             y += ROW + GAP
         }
 
@@ -236,11 +259,15 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         Config.lightInsideShapes = lightInsideShapes
         Config.netherBiomeSpawns = netherBiomeSpawns
         val proofingChanged = Config.spawnProofing != spawnProofing || Config.spawnProofEverywhere != spawnProofEverywhere ||
-            Config.spawnProofRange != spawnProofRange || Config.spawnProofRenderThrough != spawnProofRenderThrough
+            Config.spawnProofRange != spawnProofRange || Config.spawnProofRenderThrough != spawnProofRenderThrough ||
+            (Config.spawnProofOpacity <= 0f) != (spawnProofOpacity <= 0f)
         Config.spawnProofing = spawnProofing
         Config.spawnProofEverywhere = spawnProofEverywhere
         Config.spawnProofRange = spawnProofRange
         Config.spawnProofRenderThrough = spawnProofRenderThrough
+        Config.spawnProofColour = spawnProofColour
+        Config.spawnProofOpacity = spawnProofOpacity
+        Config.spawnProofHeight = spawnProofHeight
         Config.fillOpacity = fillOpacity
         Config.presets = presets.mapNotNull { draft ->
             val radius = draft.radius.trim().toDoubleOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null
@@ -276,6 +303,16 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         /** Spawn proofing's reach in blocks, for the slider's value. */
         fun rangeOf(slider: Double): Int =
             lerp(slider, Config.MIN_SPAWN_PROOF_RANGE.toFloat(), Config.MAX_SPAWN_PROOF_RANGE.toFloat(), 1f).roundToInt()
+
+        /** The overlay's height in sixteenths of a block, for the slider's value. */
+        fun heightOf(slider: Double): Int =
+            lerp(slider, Config.MIN_SPAWN_PROOF_HEIGHT.toFloat(), Config.MAX_SPAWN_PROOF_HEIGHT.toFloat(), 1f).roundToInt()
+
+        fun heightText(sixteenths: Int): String = when (sixteenths) {
+            16 -> "Height: 1 block"
+            8 -> "Height: half a block"
+            else -> "Height: $sixteenths/16"
+        }
 
         fun toSlider(value: Float, min: Float, max: Float): Double = ((value - min) / (max - min)).toDouble()
 

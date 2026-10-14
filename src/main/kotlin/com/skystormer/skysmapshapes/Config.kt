@@ -72,6 +72,18 @@ object Config {
     /** Whether each patch of spawn proofing spots gets an outline of this mod's own, drawn through blocks. */
     var spawnProofRenderThrough = true
 
+    /**
+     * The colour of the spawn proofing overlay: the layer on each spot still to cover, drawn in
+     * place of Litematica's own overlay there, and the through-blocks outline.
+     */
+    var spawnProofColour = Colours.AQUA.argb
+
+    /** How see-through that layer is: 0 for not drawn at all, 1 for solid. */
+    var spawnProofOpacity = 0.25f
+
+    /** How tall that layer is, in sixteenths of a block, from [MIN_SPAWN_PROOF_HEIGHT] to a whole block. */
+    var spawnProofHeight = 2
+
     /** The accepted blocks: the block ids spawn proofing may put down, or null for every slab. */
     var spawnProofBlocks: Set<String>? = null
 
@@ -145,6 +157,8 @@ object Config {
     const val MAX_PRESETS = 4
     const val MIN_SPAWN_PROOF_RANGE = 4
     const val MAX_SPAWN_PROOF_RANGE = 64
+    const val MIN_SPAWN_PROOF_HEIGHT = 1
+    const val MAX_SPAWN_PROOF_HEIGHT = 16
     const val MIN_LINE_WIDTH = 0.5f
     const val MAX_LINE_WIDTH = 8f
     const val DEFAULT_LINE_WIDTH = 2f
@@ -171,6 +185,9 @@ object Config {
             spawnProofEverywhere = json.get("spawnProofEverywhere")?.asBoolean ?: spawnProofEverywhere
             spawnProofRange = (json.get("spawnProofRange")?.asInt ?: spawnProofRange).coerceIn(MIN_SPAWN_PROOF_RANGE, MAX_SPAWN_PROOF_RANGE)
             spawnProofRenderThrough = json.get("spawnProofRenderThrough")?.asBoolean ?: spawnProofRenderThrough
+            spawnProofColour = Colours.parse(json.get("spawnProofColour")?.asString) ?: spawnProofColour
+            spawnProofOpacity = (json.get("spawnProofOpacity")?.asFloat ?: spawnProofOpacity).coerceIn(0f, 1f)
+            spawnProofHeight = (json.get("spawnProofHeight")?.asInt ?: spawnProofHeight).coerceIn(MIN_SPAWN_PROOF_HEIGHT, MAX_SPAWN_PROOF_HEIGHT)
             spawnProofBlocks = json.getAsJsonArray("spawnProofBlocks")?.map { it.asString }?.toSet() ?: spawnProofBlocks
             shareInChat = json.get("shareInChat")?.asBoolean ?: shareInChat
             privateShareCommand = json.get("privateShareCommand")?.asString?.trim()?.removePrefix("/")
@@ -223,6 +240,9 @@ object Config {
             json.addProperty("spawnProofEverywhere", spawnProofEverywhere)
             json.addProperty("spawnProofRange", spawnProofRange)
             json.addProperty("spawnProofRenderThrough", spawnProofRenderThrough)
+            json.addProperty("spawnProofColour", Colours.format(spawnProofColour))
+            json.addProperty("spawnProofOpacity", spawnProofOpacity)
+            json.addProperty("spawnProofHeight", spawnProofHeight)
             spawnProofBlocks?.let { ids -> json.add("spawnProofBlocks", JsonArray().also { a -> ids.sorted().forEach(a::add) }) }
             json.addProperty("shareInChat", shareInChat)
             json.addProperty("privateShareCommand", privateShareCommand)

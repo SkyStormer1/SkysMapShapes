@@ -1,0 +1,12 @@
+{
+  "required": false,
+  "package": "com.skystormer.skysmapshapes.mixin.litematica",
+  "plugin": "com.skystormer.skysmapshapes.mixin.litematica.LitematicaMixinPlugin",
+  "compatibilityLevel": "JAVA_${java_version}",
+  "client": [
+    "ChunkRendererSchematicVboMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

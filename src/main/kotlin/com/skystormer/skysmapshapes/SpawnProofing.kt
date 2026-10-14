@@ -6,7 +6,10 @@ import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.client.Minecraft
 import net.minecraft.core.BlockPos
 import net.minecraft.core.registries.BuiltInRegistries
+import net.minecraft.gizmos.GizmoStyle
 import net.minecraft.gizmos.Gizmos
+import net.minecraft.world.phys.AABB
+import kotlin.math.roundToInt
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
 import net.minecraft.world.inventory.ContainerInput
@@ -68,7 +71,11 @@ object SpawnProofing {
     @Volatile
     private var gatheredIn: String? = null
 
-    /** What the placement holds now, to rebuild only on a change. */
+    /**
+     * What the placement holds now, to rebuild only on a change. Sorted. Also read by Litematica's
+     * chunk builder threads, through [coversLitematicaOverlay].
+     */
+    @Volatile
     private var shownSpots: LongArray? = null
     private var shownState: BlockState? = null
 
@@ -172,6 +179,9 @@ object SpawnProofing {
     @Volatile
     private var outline: List<SpawnOutlines.Edge> = emptyList()
 
+    /** The layer drawn on the spots still to cover, in place of Litematica's overlay there. */
+    private var fill: List<SpawnOutlines.Rect> = emptyList()
+
     /** Whether [outline] needs working out again, and whether it was wanted last time. */
     private var outlineStale = false
     private var outlineWanted = false
@@ -188,36 +198,63 @@ object SpawnProofing {
     }
 
     /**
-     * Works out [outline]: one line around each patch of spots still to cover. Done when the
-     * spots change (you moved, came into or went out of range, or the overlay or block changed),
-     * when a block on a spot changes, or when the setting is switched; never on a timer.
+     * Called by `ChunkRendererSchematicVboMixin`, on Litematica's chunk builder threads, for each
+     * block Litematica is about to draw its overlay box on: true for spawn proofing's own spots,
+     * which get this mod's [fill] instead, in the colour, opacity and height you set. Your other
+     * placements keep Litematica's overlay, and Easy Place is untouched.
+     */
+    @JvmStatic
+    fun coversLitematicaOverlay(pos: BlockPos): Boolean {
+        val spots = shownSpots ?: return false
+        return java.util.Arrays.binarySearch(spots, pos.asLong()) >= 0
+    }
+
+    /**
+     * Works out [fill] and [outline]: one layer over, and one line around, each patch of spots
+     * still to cover. Done when the spots change (you moved, came into or went out of range, or
+     * the overlay or block changed), when a block on a spot changes, or when a setting is
+     * switched; never on a timer.
      */
     private fun updateOutlines() {
         outlineStale = false
         val spots = shownSpots
         val level = Minecraft.getInstance().level
-        if (spots == null || level == null || !Config.spawnProofRenderThrough) {
+        if (spots == null || level == null) {
             outline = emptyList()
+            fill = emptyList()
             return
         }
         val pos = BlockPos.MutableBlockPos()
         val left = spots.filter { level.getBlockState(pos.set(it)).canBeReplaced() }.toLongArray()
-        outline = if (left.isEmpty()) emptyList() else SpawnOutlines.edges(left)
+        outline = if (left.isEmpty() || !Config.spawnProofRenderThrough) emptyList() else SpawnOutlines.edges(left)
+        fill = if (left.isEmpty() || Config.spawnProofOpacity <= 0f) emptyList() else SpawnOutlines.rectangles(left)
     }
 
     /**
-     * Called as each frame is gathered: with [Config.spawnProofRenderThrough], the [outline]
-     * drawn through blocks on the floor where the blocks go, so spots behind walls show. This
-     * mod's own lines; Litematica's settings and other placements are left alone.
+     * Called as each frame is gathered: the [fill] on the spots still to cover, in the colour,
+     * opacity and height set, and with [Config.spawnProofRenderThrough] the [outline] drawn
+     * through blocks on the floor where the blocks go, so spots behind walls show. This mod's own
+     * drawing; Litematica's settings and other placements are left alone.
      */
     fun drawOutlines() {
-        if (broken || !Config.spawnProofRenderThrough) return
+        if (broken) return
+        val rects = fill
         val edges = outline
-        if (edges.isEmpty()) return
+        if (rects.isEmpty() && edges.isEmpty()) return
         try {
+            val rgb = Config.spawnProofColour and 0xFFFFFF
+            if (rects.isNotEmpty()) {
+                val style = GizmoStyle.fill(((Config.spawnProofOpacity * 255).roundToInt().coerceIn(0, 255) shl 24) or rgb)
+                val height = Config.spawnProofHeight / 16.0
+                for (rect in rects) {
+                    Gizmos.cuboid(AABB(rect.x1.toDouble(), rect.y.toDouble(), rect.z1.toDouble(),
+                        rect.x2.toDouble(), rect.y + height, rect.z2.toDouble()), style)
+                }
+            }
+            val outlineColour = 0xFF000000.toInt() or rgb
             for (edge in edges) {
                 val y = edge.y + LIFT
-                Gizmos.line(Vec3(edge.x1.toDouble(), y, edge.z1.toDouble()), Vec3(edge.x2.toDouble(), y, edge.z2.toDouble()), OUTLINE, OUTLINE_WIDTH)
+                Gizmos.line(Vec3(edge.x1.toDouble(), y, edge.z1.toDouble()), Vec3(edge.x2.toDouble(), y, edge.z2.toDouble()), outlineColour, OUTLINE_WIDTH)
                     .setAlwaysOnTop()
             }
         } catch (e: Throwable) {
@@ -407,7 +444,6 @@ object SpawnProofing {
     private const val SWAP_COOLDOWN = 4
 
     /** The through-blocks outline: blue lines just above the floor where the blocks go. */
-    private const val OUTLINE = 0xFF33CCFF.toInt()
     private const val OUTLINE_WIDTH = 2f
     private const val LIFT = 0.02
 
