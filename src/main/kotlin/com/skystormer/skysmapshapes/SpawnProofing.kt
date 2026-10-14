@@ -154,19 +154,40 @@ object SpawnProofing {
         if (broken || !installed) return
         ticks = (ticks + 1) % CHECK_EVERY
         if (ticks == 0) update()
-        if (ticks % OUTLINE_EVERY == 0) updateOutlines()
+        val wanted = Config.spawnProofRenderThrough
+        if (wanted != outlineWanted) {
+            outlineWanted = wanted
+            outlineStale = true
+        }
+        if (outlineStale) updateOutlines()
     }
 
-    /** The through-blocks outline's edges, worked out on the tick and drawn every frame. */
+    /** The through-blocks outline's edges: worked out only when something changed, drawn every frame. */
     @Volatile
     private var outline: List<SpawnOutlines.Edge> = emptyList()
 
+    /** Whether [outline] needs working out again, and whether it was wanted last time. */
+    private var outlineStale = false
+    private var outlineWanted = false
+
     /**
-     * Works out [outline]: one line around each patch of spots still to cover. A spot you have
-     * just covered drops out straight away, without waiting for MiniHUD to look again, so the
-     * outline shrinks as you go.
+     * Called by `ClientLevelMixin` for every block that changes. Only a change on one of the spots
+     * matters: then the outline is worked out again on the next tick, so a spot you cover drops
+     * out straight away, without waiting for MiniHUD to look again.
+     */
+    @JvmStatic
+    fun blockChanged(pos: BlockPos) {
+        val spots = shownSpots ?: return
+        if (!outlineStale && java.util.Arrays.binarySearch(spots, pos.asLong()) >= 0) outlineStale = true
+    }
+
+    /**
+     * Works out [outline]: one line around each patch of spots still to cover. Done when the
+     * spots change (you moved, came into or went out of range, or the overlay or block changed),
+     * when a block on a spot changes, or when the setting is switched; never on a timer.
      */
     private fun updateOutlines() {
+        outlineStale = false
         val spots = shownSpots
         val level = Minecraft.getInstance().level
         if (spots == null || level == null || !Config.spawnProofRenderThrough) {
@@ -228,6 +249,7 @@ object SpawnProofing {
             LitematicaPlacement.show(spots, state)
             shownSpots = spots
             shownState = state
+            outlineStale = true
         } catch (e: Throwable) {
             broken = true
             Log.error("Could not make Litematica's spawn proofing placement; spawn proofing is off until the game restarts", e)
@@ -300,6 +322,7 @@ object SpawnProofing {
         if (shownSpots == null) return
         shownSpots = null
         shownState = null
+        outlineStale = true
         try {
             LitematicaPlacement.clear()
         } catch (e: Throwable) {
@@ -378,9 +401,6 @@ object SpawnProofing {
     private const val OUTLINE = 0xFF33CCFF.toInt()
     private const val OUTLINE_WIDTH = 2f
     private const val LIFT = 0.02
-
-    /** Ticks between outline updates: five times a second, so it keeps up as you place blocks. */
-    private const val OUTLINE_EVERY = 4
 
     /** How finely the view is stepped along to find the spot you look at. */
     private const val STEP = 0.05
