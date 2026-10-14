@@ -138,7 +138,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
             })
             y += ROW + GAP
             addRenderableWidget(Slider(left, y, halfRow, toSlider(spawnProofRange.toFloat(), Config.MIN_SPAWN_PROOF_RANGE.toFloat(), Config.MAX_SPAWN_PROOF_RANGE.toFloat()),
-                { rangeOf(it).let { r -> if (r >= Config.MAX_SPAWN_PROOF_RANGE) "Reach: as far as MiniHUD" else "Reach: $r blocks" } },
+                { rangeOf(it).let { r -> if (r >= Config.MAX_SPAWN_PROOF_RANGE) "Distance: as far as MiniHUD" else "Distance: $r blocks" } },
                 "How far from you, in blocks each way, spawn proofing puts blocks. At the top it goes as far as MiniHUD's light levels: " +
                     "MiniHUD's Light Level Range setting, 24 blocks unless you change it, at most 64. Turn it down if the game slows.") { spawnProofRange = rangeOf(it) })
             addRenderableWidget(Button.builder(Component.literal("Blocks…")) {
