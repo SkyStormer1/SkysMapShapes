@@ -29,7 +29,7 @@ import net.minecraft.world.phys.Vec3
 /**
  * Spawn proofing with Litematica's Easy Place: every floor MiniHUD's light level overlay marks,
  * where you have said it is a problem, gets a schematic block on it (a bottom slab, a carpet, a
- * button: one of the [SpawnProofBlocks] you picked), so Easy Place puts it there in a click.
+ * button: one of the [SpawnProofBlocks] you accepted), so Easy Place puts it there in a click.
  *
  * Where it is a problem: inside the shapes you set to spawn-proof (right-click one on the map),
  * or everywhere the overlay shows with [Config.spawnProofEverywhere]. A marked spot counts when
@@ -64,6 +64,10 @@ object SpawnProofing {
     @Volatile
     private var gathered: LongArray = LongArray(0)
 
+    /** The dimension [gathered] is in: spots from the one you just left are no use in the next. */
+    @Volatile
+    private var gatheredIn: String? = null
+
     /** What the placement holds now, to rebuild only on a change. */
     private var shownSpots: LongArray? = null
     private var shownState: BlockState? = null
@@ -97,6 +101,7 @@ object SpawnProofing {
             val volumes = volumes(dimension)
             if (volumes.isEmpty() && !Config.spawnProofEverywhere) {
                 gathered = LongArray(0)
+                gatheredIn = dimension
                 return
             }
             @Suppress("UNCHECKED_CAST")
@@ -127,6 +132,7 @@ object SpawnProofing {
             }
             out.sort()
             gathered = out.toLongArray()
+            gatheredIn = dimension
             if (!seen) {
                 seen = true
                 Log.info("Spawn proofing: {} spot(s) to cover", out.size)
@@ -238,7 +244,7 @@ object SpawnProofing {
             wasOn = true
             LightLevels.refresh()
         }
-        val spots = gathered
+        val spots = if (gatheredIn == Dimensions.ofPlayer()) gathered else LongArray(0)
         val state = chooseBlock()?.let(SpawnProofBlocks::stateFor)
         if (state == null || spots.isEmpty()) {
             clear()
@@ -276,18 +282,20 @@ object SpawnProofing {
         val held = player.mainHandItem
         val heldBlock = (held.item as? BlockItem)?.block
         if (!held.isEmpty && heldBlock == null) return
-        if (heldBlock != null && heldBlock in SpawnProofBlocks.picked()) return
+        if (heldBlock != null && heldBlock in SpawnProofBlocks.accepted()) return
         try {
             if (!LitematicaPlacement.easyPlaceOn()) return
             if (!lookingAtSpot(minecraft, spots)) return
             swapCooldown = SWAP_COOLDOWN
             val inventory = player.inventory
-            val slot = (0 until Inventory.INVENTORY_SIZE).firstOrNull { i ->
+            fun slotOf(wanted: (Block) -> Boolean) = (0 until Inventory.INVENTORY_SIZE).firstOrNull { i ->
                 val stack = inventory.getItem(i)
-                !stack.isEmpty && (stack.item as? BlockItem)?.block == state.block
+                !stack.isEmpty && (stack.item as? BlockItem)?.block?.let(wanted) == true
             }
+            // The block the placement shows; else any accepted one, and the placement follows it next tick.
+            val slot = slotOf { it == state.block } ?: slotOf { it in SpawnProofBlocks.accepted() }?.also { ticks = CHECK_EVERY - 1 }
             when {
-                slot == null -> player.sendOverlayMessage(Component.literal("No ${state.block.name.string} to spawn-proof with"))
+                slot == null -> player.sendOverlayMessage(Component.literal("No accepted blocks to spawn-proof with"))
                 Inventory.isHotbarSlot(slot) -> inventory.setSelectedSlot(slot)
                 else -> minecraft.gameMode?.handleContainerInput(player.inventoryMenu.containerId, slot, inventory.selectedSlot, ContainerInput.SWAP, player)
             }
@@ -334,6 +342,7 @@ object SpawnProofing {
     fun reset() {
         clear()
         gathered = LongArray(0)
+        gatheredIn = null
     }
 
     /** Asks for the spots again, as after a change to what counts. */
@@ -342,15 +351,15 @@ object SpawnProofing {
     }
 
     /**
-     * The block to put down: the one in your hand when it is one you picked; else the one used
-     * last, while you still have some; else the picked block you have most of; else the first picked.
+     * The block to put down: the one in your hand when it is accepted; else the one used last,
+     * while you still have some; else the accepted block you have most of; else the first accepted.
      */
     private fun chooseBlock(): Block? {
-        val picked = SpawnProofBlocks.picked()
-        if (picked.isEmpty()) return null
+        val accepted = SpawnProofBlocks.accepted()
+        if (accepted.isEmpty()) return null
         val player = Minecraft.getInstance().player ?: return null
         val held = (player.mainHandItem.item as? BlockItem)?.block
-        if (held != null && held in picked) {
+        if (held != null && held in accepted) {
             current = held
             return held
         }
@@ -359,10 +368,10 @@ object SpawnProofing {
         for (slot in 0 until inventory.containerSize) {
             val stack = inventory.getItem(slot)
             val block = (stack.item as? BlockItem)?.block ?: continue
-            if (block in picked) counts.merge(block, stack.count, Int::plus)
+            if (block in accepted) counts.merge(block, stack.count, Int::plus)
         }
-        current?.let { if (it in picked && (counts[it] ?: 0) > 0) return it }
-        val best = counts.maxByOrNull { it.value }?.key ?: SpawnProofBlocks.candidates().first { it in picked }
+        current?.let { if (it in accepted && (counts[it] ?: 0) > 0) return it }
+        val best = counts.maxByOrNull { it.value }?.key ?: SpawnProofBlocks.candidates().first { it in accepted }
         current = best
         return best
     }
@@ -408,7 +417,7 @@ object SpawnProofing {
 
 /**
  * The blocks spawn proofing can put down, in the order the settings list them, and which of them
- * you picked ([Config.spawnProofBlocks], block ids; until you pick, every slab).
+ * you accepted ([Config.spawnProofBlocks], block ids; until you choose, every slab).
  */
 object SpawnProofBlocks {
 
@@ -433,7 +442,7 @@ object SpawnProofBlocks {
 
     private var all: List<Block>? = null
 
-    /** Every block that can be picked, by kind, then by name. */
+    /** Every block that can be accepted, by kind, then by name. */
     fun candidates(): List<Block> = all ?: BuiltInRegistries.BLOCK
         .filter { kindOf(it) != null && it.asItem() != Items.AIR }
         .sortedWith(compareBy<Block>({ kindOf(it)!!.ordinal }, { it.name.string }))
@@ -441,19 +450,24 @@ object SpawnProofBlocks {
 
     fun id(block: Block): String = BuiltInRegistries.BLOCK.getKey(block).toString()
 
-    /** Every slab: what is picked until you choose. */
-    fun defaults(): Set<String> = candidates().filter { kindOf(it) == Kind.SLABS }.mapTo(HashSet(), ::id)
+    private var defaultIds: Set<String>? = null
 
-    private var pickedFor: Set<String>? = null
-    private var pickedBlocks: Set<Block> = emptySet()
+    /** Every slab: what is accepted until you choose. The same set each time, so [accepted] can tell it has not changed. */
+    fun defaults(): Set<String> = defaultIds
+        ?: candidates().filter { kindOf(it) == Kind.SLABS }.mapTo(HashSet(), ::id).let { java.util.Collections.unmodifiableSet(it) }
+            .also { defaultIds = it }
 
-    fun picked(): Set<Block> {
+    private var acceptedFor: Set<String>? = null
+    private var acceptedBlocks: Set<Block> = emptySet()
+
+    /** The accepted blocks, worked out again only when the setting is changed. */
+    fun accepted(): Set<Block> {
         val ids = Config.spawnProofBlocks ?: defaults()
-        if (ids !== pickedFor) {
-            pickedFor = ids
-            pickedBlocks = candidates().filterTo(HashSet()) { id(it) in ids }
+        if (ids !== acceptedFor) {
+            acceptedFor = ids
+            acceptedBlocks = candidates().filterTo(HashSet()) { id(it) in ids }
         }
-        return pickedBlocks
+        return acceptedBlocks
     }
 
     /** How [block] goes down to spawn-proof: a bottom slab, a shut trapdoor at the bottom, a button on the floor. */

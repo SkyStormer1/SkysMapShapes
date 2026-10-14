@@ -69,10 +69,10 @@ object Config {
      */
     var spawnProofRange = MAX_SPAWN_PROOF_RANGE
 
-    /** Whether Litematica's overlay shows spawn proofing's spots through blocks while they are shown. */
+    /** Whether each patch of spawn proofing spots gets an outline of this mod's own, drawn through blocks. */
     var spawnProofRenderThrough = true
 
-    /** The block ids spawn proofing may put down, or null for every slab. */
+    /** The accepted blocks: the block ids spawn proofing may put down, or null for every slab. */
     var spawnProofBlocks: Set<String>? = null
 
     /** Whether shapes shared in chat by other players are offered as a clickable add button. */
