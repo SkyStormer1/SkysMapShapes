@@ -145,7 +145,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
                 ))).build())
             y += ROW + GAP
             addRenderableWidget(toggle(left, y, WIDTH, "Spawn proofing: show through blocks", spawnProofRenderThrough,
-                "Each spot still to cover gets a blue outline drawn through blocks, so you can see spots behind walls. " +
+                "Each patch of spots still to cover gets one blue outline drawn through blocks, so you can see spots behind walls. " +
                     "Only spawn proofing's spots: Litematica's settings and your other placements are left alone.") { spawnProofRenderThrough = it })
             y += ROW + GAP
         }
