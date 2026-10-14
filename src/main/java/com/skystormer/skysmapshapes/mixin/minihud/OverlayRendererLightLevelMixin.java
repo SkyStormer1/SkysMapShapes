@@ -2,6 +2,7 @@ package com.skystormer.skysmapshapes.mixin.minihud;
 
 import com.skystormer.skysmapshapes.LightLevels;
 import com.skystormer.skysmapshapes.NetherSpawns;
+import com.skystormer.skysmapshapes.SpawnProofing;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.BlockGetter;
@@ -19,6 +20,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * MiniHUD gathers the spots it will mark, {@link LightLevels#filter} takes out the ones outside.
  * MiniHUD's answer is whether there is anything to draw, so it is given again for what is left.
  * And in the Nether, which floors count as ones mobs can spawn on is {@link NetherSpawns#floor}'s.
+ * What is left is also what {@link SpawnProofing#gather} covers with Litematica blocks.
  * Only applied when MiniHUD is installed (see {@link MiniHudMixinPlugin}).
  */
 @Pseudo
@@ -35,6 +37,7 @@ public abstract class OverlayRendererLightLevelMixin {
         if (cir.getReturnValueZ() && LightLevels.filter(this)) {
             cir.setReturnValue(LightLevels.anyLeft(this));
         }
+        SpawnProofing.gather(this);
     }
 
     @Redirect(

@@ -4,6 +4,7 @@ import com.skystormer.skysmapshapes.Colours
 import com.skystormer.skysmapshapes.Config
 import com.skystormer.skysmapshapes.MiniHudShapes
 import com.skystormer.skysmapshapes.Shape
+import com.skystormer.skysmapshapes.SpawnProofing
 import net.minecraft.client.gui.components.AbstractSliderButton
 import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.components.CycleButton
@@ -36,6 +37,9 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
     private var hideInMiniHud = Config.hideInMiniHud
     private var lightInsideShapes = Config.lightInsideShapes
     private var netherBiomeSpawns = Config.netherBiomeSpawns
+    private var spawnProofing = Config.spawnProofing
+    private var spawnProofEverywhere = Config.spawnProofEverywhere
+    private var spawnProofRange = Config.spawnProofRange
     private var fillOpacity = Config.fillOpacity
     private val presets = MutableList(Config.MAX_PRESETS) { i ->
         Config.presets.getOrNull(i)?.let { PresetDraft(it.name, Shape.number(it.radius), it.colour) }
@@ -59,6 +63,9 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         miniHudIncludeDisabled = false
         lightInsideShapes = false
         netherBiomeSpawns = true
+        spawnProofing = true
+        spawnProofEverywhere = false
+        spawnProofRange = 24
         thicknessScale = 1f
         fillOpacity = 0.15f
     }
@@ -109,6 +116,36 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
                 "red nether wart blocks do not count in a crimson forest. " +
                 "The colours still follow light: only wither skeletons, skeletons and endermen need the dark."
             else "MiniHUD is not installed.") { netherBiomeSpawns = it }.also { it.active = installed })
+        y += ROW + GAP
+
+        // Spawn proofing with Litematica's Easy Place: needs MiniHUD and Litematica.
+        val proofing = SpawnProofing.installed
+        val halfRow = (WIDTH - GAP) / 2
+        val needs = "Needs MiniHUD and Litematica."
+        addRenderableWidget(toggle(left, y, halfRow, "Easy Place spawn proofing", spawnProofing,
+            if (proofing) "With MiniHUD's light level overlay on, the floors it marks where mobs could spawn get a Litematica block " +
+                "(a bottom slab, say) for Easy Place to put down. Only inside shapes you right-click and set to spawn proofing, " +
+                "unless Everywhere is on. In the Overworld and the End a lit floor is left alone; in the Nether light does not stop " +
+                "spawns, so every marked floor counts. MiniHUD's light level hotkey switches it on and off with the overlay."
+            else needs) { spawnProofing = it }.also { it.active = proofing })
+        addRenderableWidget(toggle(left + halfRow + GAP, y, WIDTH - halfRow - GAP, "Everywhere", spawnProofEverywhere,
+            if (proofing) "On: every floor the overlay marks counts, not only those inside spawn-proofed shapes." else needs) {
+            spawnProofEverywhere = it
+        }.also { it.active = proofing })
+        y += ROW + GAP
+        addRenderableWidget(Slider(left, y, halfRow, toSlider(spawnProofRange.toFloat(), Config.MIN_SPAWN_PROOF_RANGE.toFloat(), Config.MAX_SPAWN_PROOF_RANGE.toFloat()),
+            { "Spawn proofing reach ${rangeOf(it)}" },
+            "How far from you, in blocks each way, spawn proofing puts blocks. Turn it down if the game slows. " +
+                "MiniHUD's own light level range still limits it.") { spawnProofRange = rangeOf(it) }.also { it.active = proofing })
+        addRenderableWidget(Button.builder(Component.literal("Blocks…")) {
+            save()
+            minecraft.gui.setScreen(SpawnProofBlocksScreen(this))
+        }.bounds(left + halfRow + GAP, y, WIDTH - halfRow - GAP, ROW)
+            .tooltip(Tooltip.create(Component.literal(
+                if (proofing) "Which slabs, trapdoors, buttons, carpets, pressure plates and rails it may use. " +
+                    "The one in your hand is used when it is picked; otherwise the picked one you carry most of."
+                else needs
+            ))).build()).active = proofing
         y += ROW + GAP
 
         val half = (WIDTH - GAP) / 2
@@ -196,6 +233,11 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         Config.hideInMiniHud = hideInMiniHud
         Config.lightInsideShapes = lightInsideShapes
         Config.netherBiomeSpawns = netherBiomeSpawns
+        val proofingChanged = Config.spawnProofing != spawnProofing || Config.spawnProofEverywhere != spawnProofEverywhere ||
+            Config.spawnProofRange != spawnProofRange
+        Config.spawnProofing = spawnProofing
+        Config.spawnProofEverywhere = spawnProofEverywhere
+        Config.spawnProofRange = spawnProofRange
         Config.fillOpacity = fillOpacity
         Config.presets = presets.mapNotNull { draft ->
             val radius = draft.radius.trim().toDoubleOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null
@@ -203,6 +245,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
             Config.Preset(draft.name.trim(), radius, draft.colour)
         }
         Config.save()
+        if (proofingChanged) SpawnProofing.refresh()
     }
 
     override fun onClose() {
@@ -226,6 +269,10 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         const val WIDTH = 300
         const val ROW = 20
         const val GAP = 2
+
+        /** Spawn proofing's reach in blocks, for the slider's value. */
+        fun rangeOf(slider: Double): Int =
+            lerp(slider, Config.MIN_SPAWN_PROOF_RANGE.toFloat(), Config.MAX_SPAWN_PROOF_RANGE.toFloat(), 1f).roundToInt()
 
         fun toSlider(value: Float, min: Float, max: Float): Double = ((value - min) / (max - min)).toDouble()
 

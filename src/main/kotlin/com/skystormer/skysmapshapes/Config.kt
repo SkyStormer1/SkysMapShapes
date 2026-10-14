@@ -54,6 +54,21 @@ object Config {
      */
     var netherBiomeSpawns = true
 
+    /**
+     * Whether floors MiniHUD's light level overlay marks get a Litematica block to Easy Place on
+     * them, where you said they are a problem (see [SpawnProofing]). Needs MiniHUD and Litematica.
+     */
+    var spawnProofing = true
+
+    /** Whether every floor the overlay marks counts for spawn proofing, not only those in spawn-proofed shapes. */
+    var spawnProofEverywhere = false
+
+    /** How far from you, in blocks each way, spawn proofing reaches (MiniHUD's own range still limits it). */
+    var spawnProofRange = 24
+
+    /** The block ids spawn proofing may put down, or null for every slab. */
+    var spawnProofBlocks: Set<String>? = null
+
     /** Whether shapes shared in chat by other players are offered as a clickable add button. */
     var shareInChat = true
 
@@ -122,6 +137,8 @@ object Config {
     )
 
     const val MAX_PRESETS = 4
+    const val MIN_SPAWN_PROOF_RANGE = 4
+    const val MAX_SPAWN_PROOF_RANGE = 64
     const val MIN_LINE_WIDTH = 0.5f
     const val MAX_LINE_WIDTH = 8f
     const val DEFAULT_LINE_WIDTH = 2f
@@ -144,6 +161,10 @@ object Config {
             hideInMiniHud = json.get("hideInMiniHud")?.asBoolean ?: hideInMiniHud
             lightInsideShapes = json.get("lightInsideShapes")?.asBoolean ?: lightInsideShapes
             netherBiomeSpawns = json.get("netherBiomeSpawns")?.asBoolean ?: netherBiomeSpawns
+            spawnProofing = json.get("spawnProofing")?.asBoolean ?: spawnProofing
+            spawnProofEverywhere = json.get("spawnProofEverywhere")?.asBoolean ?: spawnProofEverywhere
+            spawnProofRange = (json.get("spawnProofRange")?.asInt ?: spawnProofRange).coerceIn(MIN_SPAWN_PROOF_RANGE, MAX_SPAWN_PROOF_RANGE)
+            spawnProofBlocks = json.getAsJsonArray("spawnProofBlocks")?.map { it.asString }?.toSet() ?: spawnProofBlocks
             shareInChat = json.get("shareInChat")?.asBoolean ?: shareInChat
             privateShareCommand = json.get("privateShareCommand")?.asString?.trim()?.removePrefix("/")
                 ?.takeIf { it.isNotEmpty() } ?: privateShareCommand
@@ -191,6 +212,10 @@ object Config {
             json.addProperty("hideInMiniHud", hideInMiniHud)
             json.addProperty("lightInsideShapes", lightInsideShapes)
             json.addProperty("netherBiomeSpawns", netherBiomeSpawns)
+            json.addProperty("spawnProofing", spawnProofing)
+            json.addProperty("spawnProofEverywhere", spawnProofEverywhere)
+            json.addProperty("spawnProofRange", spawnProofRange)
+            spawnProofBlocks?.let { ids -> json.add("spawnProofBlocks", JsonArray().also { a -> ids.sorted().forEach(a::add) }) }
             json.addProperty("shareInChat", shareInChat)
             json.addProperty("privateShareCommand", privateShareCommand)
             json.addProperty("showPanel", showPanel)

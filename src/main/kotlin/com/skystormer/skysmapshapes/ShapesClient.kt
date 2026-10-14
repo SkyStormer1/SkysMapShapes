@@ -63,6 +63,7 @@ object ShapesClient : ClientModInitializer {
                 MiniHudShapes.clear()
                 ShapeShare.clear()
                 ShapeHover.clear()
+                SpawnProofing.reset()
             }
         }
 
@@ -95,6 +96,7 @@ object ShapesClient : ClientModInitializer {
             }
             MiniHudShapes.tick(client)
             LightLevels.tick()
+            SpawnProofing.tick()
             ShapeShare.tick()
             // Hover only means anything while the world map is open.
             if (client.gui.screen()?.javaClass?.name != "xaero.map.gui.GuiMap") ShapeHover.clear()

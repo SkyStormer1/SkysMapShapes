@@ -46,6 +46,10 @@ dependencies {
     modCompileOnly("com.terraformersmc:modmenu:${property("modmenu_version")}")
     modLocalRuntime("com.terraformersmc:modmenu:${property("modmenu_version")}")
 
+    // Litematica, for spawn proofing's Easy Place placement. Optional, compiled against only.
+    modCompileOnly("maven.modrinth:litematica:${property("litematica_version")}")
+    modCompileOnly("maven.modrinth:malilib:${property("malilib_version")}")
+
     compileOnly(files(xaeroLibJar()))
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")

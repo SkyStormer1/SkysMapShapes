@@ -126,6 +126,7 @@ object MapMenus {
                 }.setActive(shape.changeable))
             }
             if (shape.volume != null) addLightOption(options, target, shape, "It only counts while it is on in MiniHUD.")
+            if (shape.volume != null) addSpawnProofOption(options, target, shape, "It only counts while it is on in MiniHUD.")
             if (ShapeShare.asShape(shape) != null) {
                 options.add(option("Share in chat…", options.size, target) { parent -> confirmShare(parent, shape) })
             }
@@ -148,6 +149,7 @@ object MapMenus {
             })
         }
         addLightOption(options, target, shape, "It counts at every height inside its outline, while it is shown on the map.")
+        addSpawnProofOption(options, target, shape, "It counts at every height inside its outline, while it is shown on the map.")
         options.add(option("Share in chat…", options.size, target) { parent -> confirmShare(parent, shape) })
         if (MiniHudShapes.installed && Config.showMiniHud) {
             // Greyed out when MiniHUD cannot take it, and the line itself says why on hover.
@@ -172,6 +174,20 @@ object MapMenus {
             tip = "${role.tip} $counts\nClick for: ${role.next.title}.") { _ ->
             ShapeStore.setLightRole(shape.id, role.next)
             say("Light levels in ${shape.name}: ${role.next.title}. ${role.next.tip}")
+        })
+    }
+
+    /**
+     * Whether [shape]'s spawnable floors get Litematica blocks to Easy Place (see [SpawnProofing]).
+     * [counts] says when it counts.
+     */
+    private fun addSpawnProofOption(options: ArrayList<RightClickOption>, target: IRightClickableElement, shape: MapShape, counts: String) {
+        if (!SpawnProofing.active || Config.spawnProofEverywhere) return
+        val on = ShapeStore.spawnProof(shape.id)
+        options.add(option("Spawn proofing: ${if (on) "on" else "off"}", options.size, target,
+            tip = "On: every floor MiniHUD's light level overlay marks inside it, where mobs could spawn, gets a block for Litematica's Easy Place. $counts") { _ ->
+            ShapeStore.setSpawnProof(shape.id, !on)
+            say(if (on) "Spawn proofing off in ${shape.name}." else "Spawn proofing ${shape.name}: switch on MiniHUD's light levels and use Easy Place.")
         })
     }
 

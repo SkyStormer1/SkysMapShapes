@@ -63,6 +63,10 @@ object ShapeStore {
     @Volatile
     private var lightRoles: Map<String, LightLevels.Role> = emptyMap()
 
+    /** The ids of shapes whose spawnable floors [SpawnProofing] covers. Read on the render thread, so replaced whole. */
+    @Volatile
+    private var spawnProofIds: Set<String> = emptySet()
+
     val isOpen: Boolean get() = file != null
 
     fun open(minecraft: Minecraft) {
@@ -93,13 +97,15 @@ object ShapeStore {
         // Hide all's notes on this mod's own shapes are pruned as those shapes are deleted.
         val remembered = hiddenByHideAll.filterKeys { !it.startsWith(MINIHUD_ID) || it in known }
         val roles = lightRoles.filterKeys { !it.startsWith(MINIHUD_ID) || it in known }
+        val proofed = spawnProofIds.filterTo(HashSet()) { !it.startsWith(MINIHUD_ID) || it in known }
         if (hidden.size != hiddenMiniHud.size || shown.size != shownMiniHud.size || remembered.size != hiddenByHideAll.size ||
-            roles.size != lightRoles.size
+            roles.size != lightRoles.size || proofed.size != spawnProofIds.size
         ) {
             hiddenMiniHud = hidden
             shownMiniHud = shown
             hiddenByHideAll = remembered
             lightRoles = roles
+            spawnProofIds = proofed
             save()
         }
     }
@@ -113,6 +119,16 @@ object ShapeStore {
         shownMiniHud = emptySet()
         hiddenByHideAll = emptyMap()
         lightRoles = emptyMap()
+        spawnProofIds = emptySet()
+    }
+
+    /** Whether the shape with [id] is spawn-proofed. */
+    fun spawnProof(id: String): Boolean = id in spawnProofIds
+
+    fun setSpawnProof(id: String, on: Boolean) {
+        spawnProofIds = if (on) spawnProofIds + id else spawnProofIds - id
+        save()
+        SpawnProofing.refresh()
     }
 
     /** What the shape with [id] does to MiniHUD's light levels. */
@@ -181,6 +197,7 @@ object ShapeStore {
         shownMiniHud = shownMiniHud - id
         hiddenByHideAll = hiddenByHideAll - id
         lightRoles = lightRoles - id
+        spawnProofIds = spawnProofIds - id
         save()
     }
 
@@ -258,6 +275,7 @@ object ShapeStore {
         all = all.filter { it.id != id }
         hiddenByHideAll = hiddenByHideAll - id
         lightRoles = lightRoles - id
+        spawnProofIds = spawnProofIds - id
         save()
     }
 
@@ -321,13 +339,14 @@ object ShapeStore {
 
     /**
      * The notes kept beside the shapes: which MiniHUD shapes are shown or hidden, what Hide all
-     * hid, and what shapes do to light levels.
+     * hid, what shapes do to light levels, and which are spawn-proofed.
      */
     private fun readNotes(path: Path) {
         hiddenMiniHud = emptySet()
         shownMiniHud = emptySet()
         hiddenByHideAll = emptyMap()
         lightRoles = emptyMap()
+        spawnProofIds = emptySet()
         try {
             if (!Files.exists(path)) return
             val json = Files.newBufferedReader(path).use { JsonParser.parseReader(it) }.asJsonObject
@@ -337,6 +356,7 @@ object ShapeStore {
                 ?.associate { (id, did) -> id to did.asJsonArray.map { it.asString }.toSet() } ?: emptyMap()
             lightRoles = json.getAsJsonObject("lightLevels")?.entrySet()
                 ?.mapNotNull { (id, role) -> LightLevels.Role.fromSaved(role.asString)?.let { id to it } }?.toMap() ?: emptyMap()
+            spawnProofIds = json.getAsJsonArray("spawnProof")?.map { it.asString }?.toSet() ?: emptySet()
         } catch (e: Exception) {
             Log.warn("Could not read the shown and hidden notes in {}: {}", path, e.toString())
         }
@@ -358,6 +378,7 @@ object ShapeStore {
             if (lightRoles.isNotEmpty()) json.add("lightLevels", JsonObject().also { o ->
                 lightRoles.toSortedMap().forEach { (id, role) -> o.addProperty(id, role.saved) }
             })
+            if (spawnProofIds.isNotEmpty()) json.add("spawnProof", JsonArray().also { a -> spawnProofIds.sorted().forEach(a::add) })
             SafeFiles.writeString(path, GSON.toJson(json))
         } catch (e: Exception) {
             Log.error("Could not save $path", e)
