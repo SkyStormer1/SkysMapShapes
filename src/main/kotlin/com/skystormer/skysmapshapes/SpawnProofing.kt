@@ -6,6 +6,8 @@ import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.client.Minecraft
 import net.minecraft.core.BlockPos
 import net.minecraft.core.registries.BuiltInRegistries
+import net.minecraft.gizmos.GizmoStyle
+import net.minecraft.gizmos.Gizmos
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
 import net.minecraft.world.inventory.ContainerInput
@@ -23,6 +25,7 @@ import net.minecraft.world.level.block.state.properties.AttachFace
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import net.minecraft.world.level.block.state.properties.Half
 import net.minecraft.world.level.block.state.properties.SlabType
+import net.minecraft.world.phys.AABB
 
 /**
  * Spawn proofing with Litematica's Easy Place: every floor MiniHUD's light level overlay marks,
@@ -38,7 +41,7 @@ import net.minecraft.world.level.block.state.properties.SlabType
  * It follows MiniHUD's overlay: it comes and goes with MiniHUD's light level renderer (and so its
  * hotkey), and reaches as far as MiniHUD looks (its light level range, 24 blocks unless changed,
  * at most 64). [Config.spawnProofRange] can keep it nearer, to go easy on the game. With
- * [Config.spawnProofRenderThrough], Litematica's overlay shows the spots through blocks.
+ * [Config.spawnProofRenderThrough], each spot also gets an outline drawn through blocks ([drawOutlines]).
  *
  * Going to Easy Place a spot with a block that is not accepted swaps an accepted one into your
  * hand ([beforeUse]).
@@ -152,11 +155,32 @@ object SpawnProofing {
         ticks = (ticks + 1) % CHECK_EVERY
         if (ticks != 0) return
         update()
+    }
+
+    /**
+     * Called as each frame is gathered: with [Config.spawnProofRenderThrough], an outline on every
+     * spot still to cover, drawn through blocks, so spots behind walls show. This mod's own
+     * outlines; Litematica's settings and other placements are left alone.
+     */
+    fun drawOutlines() {
+        if (broken || !Config.spawnProofRenderThrough) return
+        val spots = shownSpots ?: return
+        val level = Minecraft.getInstance().level ?: return
         try {
-            LitematicaPlacement.renderThrough(shownSpots != null && Config.spawnProofRenderThrough)
+            val style = GizmoStyle.stroke(OUTLINE, OUTLINE_WIDTH)
+            val pos = BlockPos.MutableBlockPos()
+            for (spot in spots) {
+                pos.set(BlockPos.getX(spot), BlockPos.getY(spot), BlockPos.getZ(spot))
+                // Covered already: MiniHUD has not looked again yet, but there is nothing to show.
+                if (!level.getBlockState(pos).canBeReplaced()) continue
+                val x = pos.x.toDouble()
+                val y = pos.y.toDouble()
+                val z = pos.z.toDouble()
+                Gizmos.cuboid(AABB(x + INSET, y, z + INSET, x + 1 - INSET, y + OUTLINE_HEIGHT, z + 1 - INSET), style).setAlwaysOnTop()
+            }
         } catch (e: Throwable) {
             broken = true
-            Log.error("Could not set Litematica's overlay to show through blocks; spawn proofing is off until the game restarts", e)
+            Log.error("Could not draw spawn proofing's outlines; spawn proofing is off until the game restarts", e)
         }
     }
 
@@ -334,6 +358,12 @@ object SpawnProofing {
 
     /** Ticks to wait after a swap, so holding the use key does not swap again before the server catches up. */
     private const val SWAP_COOLDOWN = 4
+
+    /** The through-blocks outline: a low box on the floor where the block goes, in Litematica's missing-block blue. */
+    private const val OUTLINE = 0xFF33CCFF.toInt()
+    private const val OUTLINE_WIDTH = 2f
+    private const val OUTLINE_HEIGHT = 0.25
+    private const val INSET = 0.05
 
     /** How finely the view is stepped along to find the spot you look at. */
     private const val STEP = 0.05

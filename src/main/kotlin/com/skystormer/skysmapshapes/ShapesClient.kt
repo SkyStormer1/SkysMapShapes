@@ -12,6 +12,7 @@ import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelExtractionEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.SharedConstants
@@ -79,6 +80,9 @@ object ShapesClient : ClientModInitializer {
                 }
             }
         }
+
+        // Spawn proofing's through-blocks outlines, added as each frame is gathered.
+        LevelExtractionEvents.END_EXTRACTION.register { SpawnProofing.drawOutlines() }
 
         // Before the game handles the use key, so Easy Place gets the swapped-in block.
         ClientTickEvents.START_CLIENT_TICK.register { client -> SpawnProofing.beforeUse(client) }
