@@ -15,7 +15,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * Leaves out Litematica's overlay box on spawn proofing's own spots, which get this mod's overlay
- * instead, in the colour, opacity and height you set (see {@link SpawnProofing#coversLitematicaOverlay}).
+ * instead, in the colour, opacity and height you set, and on spots you have already covered, which
+ * Litematica would mark as extra blocks (see {@link SpawnProofing#ownsLitematicaOverlay}).
  * Litematica's ghost blocks still show, your other placements keep Litematica's overlay, and Easy
  * Place works as before. Only applied when Litematica is installed (see {@link LitematicaMixinPlugin}).
  */
@@ -31,6 +32,6 @@ public abstract class ChunkRendererSchematicVboMixin {
     )
     private void skysmapshapes$ownOverlayOnSpawnProofing(OverlayType type, BlockPos pos, BlockState stateSchematic, boolean missing,
             ChunkRenderDataSchematic data, ChunkMeshDataSchematic mesh, ChunkRenderDispatcherBuffers buffers, CallbackInfo ci) {
-        if (SpawnProofing.coversLitematicaOverlay(pos)) ci.cancel();
+        if (SpawnProofing.ownsLitematicaOverlay(pos, stateSchematic.isAir())) ci.cancel();
     }
 }

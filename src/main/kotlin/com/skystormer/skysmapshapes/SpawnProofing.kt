@@ -8,7 +8,7 @@ import net.minecraft.core.BlockPos
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.gizmos.GizmoStyle
 import net.minecraft.gizmos.Gizmos
-import net.minecraft.world.phys.AABB
+import net.minecraft.core.Direction
 import kotlin.math.roundToInt
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
@@ -77,6 +77,14 @@ object SpawnProofing {
      */
     @Volatile
     private var shownSpots: LongArray? = null
+
+    /**
+     * The placement's box (min x, y, z, max x, y, z), also read by Litematica's chunk builder
+     * threads: inside it, where the placement holds air, a block of yours is a spot you have
+     * already covered, which Litematica would otherwise mark as an extra block.
+     */
+    @Volatile
+    private var shownBox: IntArray? = null
     private var shownState: BlockState? = null
 
     /** The block in use, kept while you hold something else so the schematic does not flicker. */
@@ -179,8 +187,13 @@ object SpawnProofing {
     @Volatile
     private var outline: List<SpawnOutlines.Edge> = emptyList()
 
-    /** The layer drawn on the spots still to cover, in place of Litematica's overlay there. */
+    /** The layer drawn on the spots still to cover, in place of Litematica's overlay there: its tops... */
+    @Volatile
     private var fill: List<SpawnOutlines.Rect> = emptyList()
+
+    /** ...and its sides, only around the outside of each patch, so touching tops show no seams. */
+    @Volatile
+    private var fillSides: List<SpawnOutlines.Edge> = emptyList()
 
     /** Whether [outline] needs working out again, and whether it was wanted last time. */
     private var outlineStale = false
@@ -197,6 +210,17 @@ object SpawnProofing {
         if (!outlineStale && java.util.Arrays.binarySearch(spots, pos.asLong()) >= 0) outlineStale = true
     }
 
+    /** The smallest box around [spots]: min x, y, z, then max x, y, z. */
+    private fun boxOf(spots: LongArray): IntArray {
+        val box = intArrayOf(Int.MAX_VALUE, Int.MAX_VALUE, Int.MAX_VALUE, Int.MIN_VALUE, Int.MIN_VALUE, Int.MIN_VALUE)
+        for (spot in spots) {
+            val x = BlockPos.getX(spot); val y = BlockPos.getY(spot); val z = BlockPos.getZ(spot)
+            if (x < box[0]) box[0] = x; if (y < box[1]) box[1] = y; if (z < box[2]) box[2] = z
+            if (x > box[3]) box[3] = x; if (y > box[4]) box[4] = y; if (z > box[5]) box[5] = z
+        }
+        return box
+    }
+
     /**
      * Called by `ChunkRendererSchematicVboMixin`, on Litematica's chunk builder threads, for each
      * block Litematica is about to draw its overlay box on: true for spawn proofing's own spots,
@@ -207,6 +231,19 @@ object SpawnProofing {
     fun coversLitematicaOverlay(pos: BlockPos): Boolean {
         val spots = shownSpots ?: return false
         return java.util.Arrays.binarySearch(spots, pos.asLong()) >= 0
+    }
+
+    /**
+     * Whether Litematica's overlay at [pos], where the schematic holds [schematicAir], belongs to
+     * spawn proofing: one of its spots, or a spot already covered (inside its box, where the
+     * placement holds air and you have put a block), which Litematica would mark as extra.
+     */
+    @JvmStatic
+    fun ownsLitematicaOverlay(pos: BlockPos, schematicAir: Boolean): Boolean {
+        if (coversLitematicaOverlay(pos)) return true
+        if (!schematicAir) return false
+        val box = shownBox ?: return false
+        return pos.x >= box[0] && pos.y >= box[1] && pos.z >= box[2] && pos.x <= box[3] && pos.y <= box[4] && pos.z <= box[5]
     }
 
     /**
@@ -222,12 +259,16 @@ object SpawnProofing {
         if (spots == null || level == null) {
             outline = emptyList()
             fill = emptyList()
+            fillSides = emptyList()
             return
         }
         val pos = BlockPos.MutableBlockPos()
         val left = spots.filter { level.getBlockState(pos.set(it)).canBeReplaced() }.toLongArray()
-        outline = if (left.isEmpty() || !Config.spawnProofRenderThrough) emptyList() else SpawnOutlines.edges(left)
-        fill = if (left.isEmpty() || Config.spawnProofOpacity <= 0f) emptyList() else SpawnOutlines.rectangles(left)
+        val filled = left.isNotEmpty() && Config.spawnProofOpacity > 0f
+        val edges = if (left.isNotEmpty() && (filled || Config.spawnProofRenderThrough)) SpawnOutlines.edges(left) else emptyList()
+        outline = if (Config.spawnProofRenderThrough) edges else emptyList()
+        fillSides = if (filled) edges else emptyList()
+        fill = if (filled) SpawnOutlines.rectangles(left) else emptyList()
     }
 
     /**
@@ -247,8 +288,14 @@ object SpawnProofing {
                 val style = GizmoStyle.fill(((Config.spawnProofOpacity * 255).roundToInt().coerceIn(0, 255) shl 24) or rgb)
                 val height = Config.spawnProofHeight / 16.0
                 for (rect in rects) {
-                    Gizmos.cuboid(AABB(rect.x1.toDouble(), rect.y.toDouble(), rect.z1.toDouble(),
-                        rect.x2.toDouble(), rect.y + height, rect.z2.toDouble()), style)
+                    val top = rect.y + height
+                    Gizmos.rect(Vec3(rect.x1.toDouble(), top, rect.z1.toDouble()), Vec3(rect.x2.toDouble(), top, rect.z2.toDouble()), Direction.UP, style)
+                }
+                for (side in fillSides) {
+                    val bottom = side.y.toDouble()
+                    val top = side.y + height
+                    Gizmos.rect(Vec3(side.x1.toDouble(), bottom, side.z1.toDouble()), Vec3(side.x2.toDouble(), bottom, side.z2.toDouble()),
+                        Vec3(side.x2.toDouble(), top, side.z2.toDouble()), Vec3(side.x1.toDouble(), top, side.z1.toDouble()), style)
                 }
             }
             val outlineColour = 0xFF000000.toInt() or rgb
@@ -290,6 +337,7 @@ object SpawnProofing {
         if (state == shownState && spots.contentEquals(shownSpots)) return
         try {
             LitematicaPlacement.show(spots, state)
+            shownBox = boxOf(spots)
             shownSpots = spots
             shownState = state
             outlineStale = true
@@ -366,6 +414,7 @@ object SpawnProofing {
     fun clear() {
         if (shownSpots == null) return
         shownSpots = null
+        shownBox = null
         shownState = null
         outlineStale = true
         try {

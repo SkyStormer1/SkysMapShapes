@@ -129,3 +129,21 @@ tasks.jar {
 if (hasProperty("notIde")) {
     tasks.withType<JavaExec>().configureEach { jvmArgs("-Dskysmapshapes.notIde=true") }
 }
+
+// In-game test: `gradlew runClientGameTest -PnotIde` builds a dark room in a test world with
+// MiniHUD, Litematica and MaLiLib loaded and screenshots spawn proofing's overlay. Their jars go
+// in devmods/ (not committed); without them the test has nothing to show.
+fabricApi {
+    configureTests {
+        createSourceSet = true
+        modId = "skysmapshapes-test"
+        enableGameTests = false
+        eula = true
+    }
+}
+
+val devMods = fileTree("devmods") { include("*.jar") }
+dependencies {
+    "gametestCompileOnly"(devMods)
+    modLocalRuntime(devMods)
+}
