@@ -6,6 +6,9 @@ import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.client.Minecraft
 import net.minecraft.core.BlockPos
 import net.minecraft.core.registries.BuiltInRegistries
+import net.minecraft.network.chat.Component
+import net.minecraft.world.entity.player.Inventory
+import net.minecraft.world.inventory.ContainerInput
 import net.minecraft.world.item.BlockItem
 import net.minecraft.world.item.Items
 import net.minecraft.world.level.block.BasePressurePlateBlock
@@ -33,8 +36,12 @@ import net.minecraft.world.level.block.state.properties.SlabType
  * and which floors are marked there at all follows the biome's mobs ([NetherSpawns]).
  *
  * It follows MiniHUD's overlay: it comes and goes with MiniHUD's light level renderer (and so its
- * hotkey), and reaches only as far as MiniHUD looks. [Config.spawnProofRange] keeps it nearer, to
- * go easy on the game.
+ * hotkey), and reaches as far as MiniHUD looks (its light level range, 24 blocks unless changed,
+ * at most 64). [Config.spawnProofRange] can keep it nearer, to go easy on the game. With
+ * [Config.spawnProofRenderThrough], Litematica's overlay shows the spots through blocks.
+ *
+ * Going to Easy Place a spot with a block that is not accepted swaps an accepted one into your
+ * hand ([beforeUse]).
  *
  * The spots are copied out as MiniHUD gathers them (`OverlayRendererLightLevelMixin` calls
  * [gather]); the placement is rebuilt on the client tick, at most twice a second and only when the
@@ -93,7 +100,8 @@ object SpawnProofing {
             val spots = (spotsField ?: overlay.javaClass.getDeclaredField(SPOTS).also { it.isAccessible = true; spotsField = it })
                 .get(overlay) as List<Any?>
             val limit = level.dimensionType().monsterSpawnBlockLightLimit()
-            val range = Config.spawnProofRange
+            // At the slider's top it reaches as far as MiniHUD looks.
+            val range = if (Config.spawnProofRange >= Config.MAX_SPAWN_PROOF_RANGE) Int.MAX_VALUE else Config.spawnProofRange
             val px = player.blockX
             val py = player.blockY
             val pz = player.blockZ
@@ -143,6 +151,16 @@ object SpawnProofing {
         if (broken || !installed) return
         ticks = (ticks + 1) % CHECK_EVERY
         if (ticks != 0) return
+        update()
+        try {
+            LitematicaPlacement.renderThrough(shownSpots != null && Config.spawnProofRenderThrough)
+        } catch (e: Throwable) {
+            broken = true
+            Log.error("Could not set Litematica's overlay to show through blocks; spawn proofing is off until the game restarts", e)
+        }
+    }
+
+    private fun update() {
         val on = try {
             active && Minecraft.getInstance().player != null && overlayShowing()
         } catch (e: Throwable) {
@@ -176,6 +194,66 @@ object SpawnProofing {
             Log.error("Could not make Litematica's spawn proofing placement; spawn proofing is off until the game restarts", e)
             clear()
         }
+    }
+
+    /**
+     * Called at the start of every client tick, before the game handles the use key: when you go
+     * to Easy Place one of the spots holding a block that is not accepted (or nothing), the
+     * accepted block the placement shows is put in your hand instead, from the hotbar or the rest
+     * of your inventory. Anything else in your hand (a tool, food) is left alone.
+     */
+    fun beforeUse(minecraft: Minecraft) {
+        if (broken) return
+        val state = shownState ?: return
+        val spots = shownSpots ?: return
+        if (!minecraft.options.keyUse.isDown || minecraft.gui.screen() != null) return
+        if (swapCooldown > 0) {
+            swapCooldown--
+            return
+        }
+        val player = minecraft.player ?: return
+        val held = player.mainHandItem
+        val heldBlock = (held.item as? BlockItem)?.block
+        if (!held.isEmpty && heldBlock == null) return
+        if (heldBlock != null && heldBlock in SpawnProofBlocks.picked()) return
+        try {
+            if (!LitematicaPlacement.easyPlaceOn()) return
+            if (!lookingAtSpot(minecraft, spots)) return
+            swapCooldown = SWAP_COOLDOWN
+            val inventory = player.inventory
+            val slot = (0 until Inventory.INVENTORY_SIZE).firstOrNull { i ->
+                val stack = inventory.getItem(i)
+                !stack.isEmpty && (stack.item as? BlockItem)?.block == state.block
+            }
+            when {
+                slot == null -> player.sendOverlayMessage(Component.literal("No ${state.block.name.string} to spawn-proof with"))
+                Inventory.isHotbarSlot(slot) -> inventory.setSelectedSlot(slot)
+                else -> minecraft.gameMode?.handleContainerInput(player.inventoryMenu.containerId, slot, inventory.selectedSlot, ContainerInput.SWAP, player)
+            }
+        } catch (e: Throwable) {
+            broken = true
+            Log.error("Could not swap to a spawn proofing block; spawn proofing is off until the game restarts", e)
+        }
+    }
+
+    private var swapCooldown = 0
+
+    /** Whether you are looking at one of [spots] within reach, before your view hits a solid block. */
+    private fun lookingAtSpot(minecraft: Minecraft, spots: LongArray): Boolean {
+        val player = minecraft.player ?: return false
+        val level = minecraft.level ?: return false
+        val eye = player.getEyePosition(1f)
+        val look = player.getViewVector(1f)
+        val reach = player.blockInteractionRange()
+        val pos = BlockPos.MutableBlockPos()
+        var t = 0.0
+        while (t <= reach) {
+            pos.set(eye.x + look.x * t, eye.y + look.y * t, eye.z + look.z * t)
+            if (java.util.Arrays.binarySearch(spots, pos.asLong()) >= 0) return true
+            if (!level.getBlockState(pos).canBeReplaced()) return false
+            t += STEP
+        }
+        return false
     }
 
     /** Takes the placement away, as when the overlay is switched off or you leave. */
@@ -253,6 +331,12 @@ object SpawnProofing {
 
     /** Ticks between updates: twice a second, as often as MiniHUD's own are read. */
     private const val CHECK_EVERY = 10
+
+    /** Ticks to wait after a swap, so holding the use key does not swap again before the server catches up. */
+    private const val SWAP_COOLDOWN = 4
+
+    /** How finely the view is stepped along to find the spot you look at. */
+    private const val STEP = 0.05
 }
 
 /**

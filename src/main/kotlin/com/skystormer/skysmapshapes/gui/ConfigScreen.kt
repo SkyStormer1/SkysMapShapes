@@ -40,6 +40,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
     private var spawnProofing = Config.spawnProofing
     private var spawnProofEverywhere = Config.spawnProofEverywhere
     private var spawnProofRange = Config.spawnProofRange
+    private var spawnProofRenderThrough = Config.spawnProofRenderThrough
     private var fillOpacity = Config.fillOpacity
     private val presets = MutableList(Config.MAX_PRESETS) { i ->
         Config.presets.getOrNull(i)?.let { PresetDraft(it.name, Shape.number(it.radius), it.colour) }
@@ -65,7 +66,8 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         netherBiomeSpawns = true
         spawnProofing = true
         spawnProofEverywhere = false
-        spawnProofRange = 24
+        spawnProofRange = Config.MAX_SPAWN_PROOF_RANGE
+        spawnProofRenderThrough = true
         thicknessScale = 1f
         fillOpacity = 0.15f
     }
@@ -93,60 +95,61 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         addRenderableWidget(toggle(left + (third + GAP) * 2, y, third, "Labels", showLabels, "Show each shape's label on the world map. Right-click a label to edit or delete its shape.") { showLabels = it })
         y += ROW + GAP
 
-        // MiniHUD's shapes: only when it is installed.
-        val installed = MiniHudShapes.installed
-        addRenderableWidget(toggle(left, y, third, "MiniHUD shapes", showMiniHud,
-            if (installed) "Show MiniHUD's shapes on the map as outlines, even with MiniHUD's own shape renderer off. Delete one in MiniHUD and it goes from the map too."
-            else "MiniHUD is not installed.") { showMiniHud = it }.also { it.active = installed })
-        addRenderableWidget(toggle(left + third + GAP, y, third, "Hide all: MiniHUD", hideInMiniHud,
-            "On: Hide all and Show all in the Shapes list switch MiniHUD's shapes off and on in MiniHUD too, so they go from the world as well. Off: they only hide them on the map. One shape at a time, you choose each time.") { hideInMiniHud = it }.also { it.active = installed })
-        addRenderableWidget(toggle(left + (third + GAP) * 2, y, third, "Ones off in MiniHUD", miniHudIncludeDisabled,
-            "Also draw MiniHUD shapes that are switched off in MiniHUD. They are always in the shapes list, so they can be switched back on.") { miniHudIncludeDisabled = it }.also { it.active = installed })
-        y += ROW + GAP
-        addRenderableWidget(toggle(left, y, WIDTH, "MiniHUD light levels only in shapes", lightInsideShapes,
-            if (installed) "With MiniHUD's light level overlay on, only show light levels inside your shapes. " +
-                "Right-click a shape to choose how it counts: show (the default), none (dark inside, even within another shape) or ignore. " +
-                "MiniHUD shapes count while they are on in MiniHUD, at their real size and height; " +
-                "this mod's own count while shown on the map, at every height. Needs MiniHUD shapes on."
-            else "MiniHUD is not installed.") { lightInsideShapes = it }.also { it.active = installed })
-        y += ROW + GAP
-        addRenderableWidget(toggle(left, y, WIDTH, "MiniHUD: Nether spawns by biome", netherBiomeSpawns,
-            if (installed) "In the Nether, MiniHUD's light level overlay marks a floor when a mob of that biome can spawn on it. " +
-                "Magma counts where fire-immune mobs spawn (wastes, crimson forest, soul sand valley, basalt deltas); " +
-                "red nether wart blocks do not count in a crimson forest. " +
-                "The colours still follow light: only wither skeletons, skeletons and endermen need the dark."
-            else "MiniHUD is not installed.") { netherBiomeSpawns = it }.also { it.active = installed })
-        y += ROW + GAP
+        if (MiniHudShapes.installed) {
+            // MiniHUD's shapes: only when it is installed.
+            addRenderableWidget(toggle(left, y, third, "MiniHUD shapes", showMiniHud,
+                "Show MiniHUD's shapes on the map as outlines, even with MiniHUD's own shape renderer off. Delete one in MiniHUD and it goes from the map too.") { showMiniHud = it })
+            addRenderableWidget(toggle(left + third + GAP, y, third, "Hide all: MiniHUD", hideInMiniHud,
+                "On: Hide all and Show all in the Shapes list switch MiniHUD's shapes off and on in MiniHUD too, so they go from the world as well. Off: they only hide them on the map. One shape at a time, you choose each time.") { hideInMiniHud = it })
+            addRenderableWidget(toggle(left + (third + GAP) * 2, y, third, "Ones off in MiniHUD", miniHudIncludeDisabled,
+                "Also draw MiniHUD shapes that are switched off in MiniHUD. They are always in the shapes list, so they can be switched back on.") { miniHudIncludeDisabled = it })
+            y += ROW + GAP
+            addRenderableWidget(toggle(left, y, WIDTH, "MiniHUD light levels only in shapes", lightInsideShapes,
+                "With MiniHUD's light level overlay on, only show light levels inside your shapes. " +
+                    "Right-click a shape to choose how it counts: show (the default), none (dark inside, even within another shape) or ignore. " +
+                    "MiniHUD shapes count while they are on in MiniHUD, at their real size and height; " +
+                    "this mod's own count while shown on the map, at every height. Needs MiniHUD shapes on.") { lightInsideShapes = it })
+            y += ROW + GAP
+            addRenderableWidget(toggle(left, y, WIDTH, "MiniHUD: Nether spawns by biome", netherBiomeSpawns,
+                "In the Nether, MiniHUD's light level overlay marks a floor when a mob of that biome can spawn on it. " +
+                    "Magma counts where fire-immune mobs spawn (wastes, crimson forest, soul sand valley, basalt deltas); " +
+                    "red nether wart blocks do not count in a crimson forest. " +
+                    "The colours still follow light: only wither skeletons, skeletons and endermen need the dark.") { netherBiomeSpawns = it })
+            y += ROW + GAP
+        }
 
-        // Spawn proofing with Litematica's Easy Place: needs MiniHUD and Litematica.
-        val proofing = SpawnProofing.installed
-        val halfRow = (WIDTH - GAP) / 2
-        val needs = "Needs MiniHUD and Litematica."
-        addRenderableWidget(toggle(left, y, halfRow, "Easy Place spawn proofing", spawnProofing,
-            if (proofing) "With MiniHUD's light level overlay on, the floors it marks where mobs could spawn get a Litematica block " +
-                "(a bottom slab, say) for Easy Place to put down. Only inside shapes you right-click and set to spawn proofing, " +
-                "unless Everywhere is on. In the Overworld and the End a lit floor is left alone; in the Nether light does not stop " +
-                "spawns, so every marked floor counts. MiniHUD's light level hotkey switches it on and off with the overlay."
-            else needs) { spawnProofing = it }.also { it.active = proofing })
-        addRenderableWidget(toggle(left + halfRow + GAP, y, WIDTH - halfRow - GAP, "Everywhere", spawnProofEverywhere,
-            if (proofing) "On: every floor the overlay marks counts, not only those inside spawn-proofed shapes." else needs) {
-            spawnProofEverywhere = it
-        }.also { it.active = proofing })
-        y += ROW + GAP
-        addRenderableWidget(Slider(left, y, halfRow, toSlider(spawnProofRange.toFloat(), Config.MIN_SPAWN_PROOF_RANGE.toFloat(), Config.MAX_SPAWN_PROOF_RANGE.toFloat()),
-            { "Spawn proofing reach ${rangeOf(it)}" },
-            "How far from you, in blocks each way, spawn proofing puts blocks. Turn it down if the game slows. " +
-                "MiniHUD's own light level range still limits it.") { spawnProofRange = rangeOf(it) }.also { it.active = proofing })
-        addRenderableWidget(Button.builder(Component.literal("Blocks…")) {
-            save()
-            minecraft.gui.setScreen(SpawnProofBlocksScreen(this))
-        }.bounds(left + halfRow + GAP, y, WIDTH - halfRow - GAP, ROW)
-            .tooltip(Tooltip.create(Component.literal(
-                if (proofing) "Which slabs, trapdoors, buttons, carpets, pressure plates and rails it may use. " +
-                    "The one in your hand is used when it is picked; otherwise the picked one you carry most of."
-                else needs
-            ))).build()).active = proofing
-        y += ROW + GAP
+        if (SpawnProofing.installed) {
+            // Spawn proofing with Litematica's Easy Place: only with MiniHUD and Litematica both installed.
+            val halfRow = (WIDTH - GAP) / 2
+            addRenderableWidget(toggle(left, y, halfRow, "Easy Place spawn proofing", spawnProofing,
+                "With MiniHUD's light level overlay on, the floors it marks where mobs could spawn get a Litematica block " +
+                    "(a bottom slab, say) for Easy Place to put down. Only inside shapes you right-click and set to spawn proofing, " +
+                    "unless Everywhere is on. In the Overworld and the End a lit floor is left alone; in the Nether light does not stop " +
+                    "spawns, so every marked floor counts. MiniHUD's light level hotkey switches it on and off with the overlay.") { spawnProofing = it })
+            addRenderableWidget(toggle(left + halfRow + GAP, y, WIDTH - halfRow - GAP, "Everywhere", spawnProofEverywhere,
+                "On: every floor the overlay marks counts, not only those inside spawn-proofed shapes.") {
+                spawnProofEverywhere = it
+            })
+            y += ROW + GAP
+            addRenderableWidget(Slider(left, y, halfRow, toSlider(spawnProofRange.toFloat(), Config.MIN_SPAWN_PROOF_RANGE.toFloat(), Config.MAX_SPAWN_PROOF_RANGE.toFloat()),
+                { rangeOf(it).let { r -> if (r >= Config.MAX_SPAWN_PROOF_RANGE) "Reach: as far as MiniHUD" else "Reach: $r blocks" } },
+                "How far from you, in blocks each way, spawn proofing puts blocks. At the top it goes as far as MiniHUD's light levels: " +
+                    "MiniHUD's Light Level Range setting, 24 blocks unless you change it, at most 64. Turn it down if the game slows.") { spawnProofRange = rangeOf(it) })
+            addRenderableWidget(Button.builder(Component.literal("Blocks…")) {
+                save()
+                minecraft.gui.setScreen(SpawnProofBlocksScreen(this))
+            }.bounds(left + halfRow + GAP, y, WIDTH - halfRow - GAP, ROW)
+                .tooltip(Tooltip.create(Component.literal(
+                    "The accepted blocks: which slabs, trapdoors, buttons, carpets, pressure plates and rails it may use. " +
+                        "The one in your hand is used when it is accepted; Easy Placing a spot with any other block swaps in an accepted one you carry."
+                ))).build())
+            y += ROW + GAP
+            addRenderableWidget(toggle(left, y, WIDTH, "Spawn proofing: show through blocks", spawnProofRenderThrough,
+                "While spawn proofing shows, Litematica's schematic overlay shows through blocks, so you can see spots behind walls. " +
+                    "It is Litematica's own setting (Schematic Overlay Render Through), so other placements show through blocks too meanwhile; " +
+                    "it goes back to how you had it after.") { spawnProofRenderThrough = it })
+            y += ROW + GAP
+        }
 
         val half = (WIDTH - GAP) / 2
         addRenderableWidget(Slider(left, y, half, toSlider(thicknessScale, Config.MIN_SCALE, Config.MAX_SCALE),
@@ -234,10 +237,11 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         Config.lightInsideShapes = lightInsideShapes
         Config.netherBiomeSpawns = netherBiomeSpawns
         val proofingChanged = Config.spawnProofing != spawnProofing || Config.spawnProofEverywhere != spawnProofEverywhere ||
-            Config.spawnProofRange != spawnProofRange
+            Config.spawnProofRange != spawnProofRange || Config.spawnProofRenderThrough != spawnProofRenderThrough
         Config.spawnProofing = spawnProofing
         Config.spawnProofEverywhere = spawnProofEverywhere
         Config.spawnProofRange = spawnProofRange
+        Config.spawnProofRenderThrough = spawnProofRenderThrough
         Config.fillOpacity = fillOpacity
         Config.presets = presets.mapNotNull { draft ->
             val radius = draft.radius.trim().toDoubleOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null

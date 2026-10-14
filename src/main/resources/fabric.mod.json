@@ -47,6 +47,7 @@
     "xaerominimap": "*",
     "skysmapexposer": "*",
     "skysstructuremap": "*",
-    "minihud": "*"
+    "minihud": "*",
+    "litematica": "*"
   }
 }

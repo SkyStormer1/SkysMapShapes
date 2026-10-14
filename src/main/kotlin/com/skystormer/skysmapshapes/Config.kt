@@ -63,8 +63,14 @@ object Config {
     /** Whether every floor the overlay marks counts for spawn proofing, not only those in spawn-proofed shapes. */
     var spawnProofEverywhere = false
 
-    /** How far from you, in blocks each way, spawn proofing reaches (MiniHUD's own range still limits it). */
-    var spawnProofRange = 24
+    /**
+     * How far from you, in blocks each way, spawn proofing reaches. At [MAX_SPAWN_PROOF_RANGE] it
+     * reaches as far as MiniHUD's light levels do; MiniHUD's own range limits it either way.
+     */
+    var spawnProofRange = MAX_SPAWN_PROOF_RANGE
+
+    /** Whether Litematica's overlay shows spawn proofing's spots through blocks while they are shown. */
+    var spawnProofRenderThrough = true
 
     /** The block ids spawn proofing may put down, or null for every slab. */
     var spawnProofBlocks: Set<String>? = null
@@ -164,6 +170,7 @@ object Config {
             spawnProofing = json.get("spawnProofing")?.asBoolean ?: spawnProofing
             spawnProofEverywhere = json.get("spawnProofEverywhere")?.asBoolean ?: spawnProofEverywhere
             spawnProofRange = (json.get("spawnProofRange")?.asInt ?: spawnProofRange).coerceIn(MIN_SPAWN_PROOF_RANGE, MAX_SPAWN_PROOF_RANGE)
+            spawnProofRenderThrough = json.get("spawnProofRenderThrough")?.asBoolean ?: spawnProofRenderThrough
             spawnProofBlocks = json.getAsJsonArray("spawnProofBlocks")?.map { it.asString }?.toSet() ?: spawnProofBlocks
             shareInChat = json.get("shareInChat")?.asBoolean ?: shareInChat
             privateShareCommand = json.get("privateShareCommand")?.asString?.trim()?.removePrefix("/")
@@ -215,6 +222,7 @@ object Config {
             json.addProperty("spawnProofing", spawnProofing)
             json.addProperty("spawnProofEverywhere", spawnProofEverywhere)
             json.addProperty("spawnProofRange", spawnProofRange)
+            json.addProperty("spawnProofRenderThrough", spawnProofRenderThrough)
             spawnProofBlocks?.let { ids -> json.add("spawnProofBlocks", JsonArray().also { a -> ids.sorted().forEach(a::add) }) }
             json.addProperty("shareInChat", shareInChat)
             json.addProperty("privateShareCommand", privateShareCommand)

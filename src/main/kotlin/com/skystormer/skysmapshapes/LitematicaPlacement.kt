@@ -1,5 +1,6 @@
 package com.skystormer.skysmapshapes
 
+import fi.dy.masa.litematica.config.Configs
 import fi.dy.masa.litematica.data.DataManager
 import fi.dy.masa.litematica.schematic.LitematicaSchematic
 import fi.dy.masa.litematica.schematic.placement.SchematicPlacement
@@ -48,6 +49,30 @@ internal object LitematicaPlacement {
         manager.addSchematicPlacement(made, false)
         manager.setSelectedSchematicPlacement(selected)
         placement = made
+    }
+
+    /** Whether Litematica's Easy Place is on. */
+    fun easyPlaceOn(): Boolean = Configs.Generic.EASY_PLACE_MODE.booleanValue
+
+    /** Litematica's own overlay through blocks setting, as it was before spawn proofing turned it on. */
+    private var savedThrough: Boolean? = null
+
+    /**
+     * Turns Litematica's schematic overlay through blocks on while spawn proofing shows ([on]), and
+     * back to how you had it after. It is Litematica's one setting, so other placements show
+     * through blocks too meanwhile.
+     */
+    fun renderThrough(on: Boolean) {
+        val option = Configs.Visuals.SCHEMATIC_OVERLAY_RENDER_THROUGH
+        if (on) {
+            if (savedThrough == null) {
+                savedThrough = option.booleanValue
+                if (!option.booleanValue) option.booleanValue = true
+            }
+        } else {
+            savedThrough?.let { option.booleanValue = it }
+            savedThrough = null
+        }
     }
 
     fun clear() {

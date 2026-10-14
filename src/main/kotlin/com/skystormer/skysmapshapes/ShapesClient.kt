@@ -80,6 +80,9 @@ object ShapesClient : ClientModInitializer {
             }
         }
 
+        // Before the game handles the use key, so Easy Place gets the swapped-in block.
+        ClientTickEvents.START_CLIENT_TICK.register { client -> SpawnProofing.beforeUse(client) }
+
         ClientTickEvents.END_CLIENT_TICK.register { client ->
             if (!hookChecked) {
                 hookChecked = true
