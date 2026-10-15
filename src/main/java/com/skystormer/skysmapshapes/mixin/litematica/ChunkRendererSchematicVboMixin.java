@@ -24,8 +24,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * Litematica would mark as extra blocks (see {@link SpawnProofing#ownsLitematicaOverlay}); and,
  * when the setting hides them, Litematica's ghost blocks on the spots (see
  * {@link SpawnProofing#hidesLitematicaBlock}).
- * Litematica's ghost blocks still show, your other placements keep Litematica's overlay, and Easy
- * Place works as before. Only applied when Litematica is installed (see {@link LitematicaMixinPlugin}).
+ * Your other placements keep Litematica's overlay. Only applied when Litematica is installed (see {@link LitematicaMixinPlugin}).
  */
 @Pseudo
 @Mixin(targets = "fi.dy.masa.litematica.render.schematic.ChunkRendererSchematicVbo", remap = false)

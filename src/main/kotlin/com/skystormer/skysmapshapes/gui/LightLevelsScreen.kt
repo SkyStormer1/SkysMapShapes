@@ -7,10 +7,7 @@ import com.skystormer.skysmapshapes.SpawnProofing
 import com.skystormer.skysmapshapes.gui.ConfigScreen.Companion.GAP
 import com.skystormer.skysmapshapes.gui.ConfigScreen.Companion.ROW
 import com.skystormer.skysmapshapes.gui.ConfigScreen.Companion.WIDTH
-import com.skystormer.skysmapshapes.gui.ConfigScreen.Companion.heightOf
-import com.skystormer.skysmapshapes.gui.ConfigScreen.Companion.heightText
 import com.skystormer.skysmapshapes.gui.ConfigScreen.Companion.lerp
-import com.skystormer.skysmapshapes.gui.ConfigScreen.Companion.rangeOf
 import com.skystormer.skysmapshapes.gui.ConfigScreen.Companion.toSlider
 import com.skystormer.skysmapshapes.gui.ConfigScreen.Companion.toggle
 import com.skystormer.skysmapshapes.gui.ConfigScreen.Slider
@@ -150,5 +147,21 @@ class LightLevelsScreen(private val parent: Screen?) : FramedScreen(Component.li
     override fun onClose() {
         save()
         minecraft.gui.setScreen(parent)
+    }
+
+    private companion object {
+        /** Spawn proofing's distance in blocks, for the slider's value. */
+        fun rangeOf(slider: Double): Int =
+            lerp(slider, Config.MIN_SPAWN_PROOF_RANGE.toFloat(), Config.MAX_SPAWN_PROOF_RANGE.toFloat(), 1f).roundToInt()
+
+        /** The overlay's height in sixteenths of a block, for the slider's value. */
+        fun heightOf(slider: Double): Int =
+            lerp(slider, Config.MIN_SPAWN_PROOF_HEIGHT.toFloat(), Config.MAX_SPAWN_PROOF_HEIGHT.toFloat(), 1f).roundToInt()
+
+        fun heightText(sixteenths: Int): String = when (sixteenths) {
+            16 -> "Height: 1 block"
+            8 -> "Height: half a block"
+            else -> "Height: $sixteenths/16"
+        }
     }
 }

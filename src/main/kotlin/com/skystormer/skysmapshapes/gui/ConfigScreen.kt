@@ -217,20 +217,6 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
             CycleButton.onOffBuilder(value).create(x, y, width, ROW, Component.literal(name)) { _, on -> onChange(on) }
                 .also { it.setTooltip(Tooltip.create(Component.literal(explanation))) }
 
-        /** Spawn proofing's reach in blocks, for the slider's value. */
-        fun rangeOf(slider: Double): Int =
-            lerp(slider, Config.MIN_SPAWN_PROOF_RANGE.toFloat(), Config.MAX_SPAWN_PROOF_RANGE.toFloat(), 1f).roundToInt()
-
-        /** The overlay's height in sixteenths of a block, for the slider's value. */
-        fun heightOf(slider: Double): Int =
-            lerp(slider, Config.MIN_SPAWN_PROOF_HEIGHT.toFloat(), Config.MAX_SPAWN_PROOF_HEIGHT.toFloat(), 1f).roundToInt()
-
-        fun heightText(sixteenths: Int): String = when (sixteenths) {
-            16 -> "Height: 1 block"
-            8 -> "Height: half a block"
-            else -> "Height: $sixteenths/16"
-        }
-
         fun toSlider(value: Float, min: Float, max: Float): Double = ((value - min) / (max - min)).toDouble()
 
         /** The slider's value between [min] and [max], snapped to [step]. */

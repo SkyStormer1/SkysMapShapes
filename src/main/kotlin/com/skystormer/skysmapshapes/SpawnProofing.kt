@@ -50,8 +50,8 @@ import net.minecraft.world.phys.Vec3
  * hand ([beforeUse]).
  *
  * The spots are copied out as MiniHUD gathers them (`OverlayRendererLightLevelMixin` calls
- * [gather]); the placement is rebuilt on the client tick, at most twice a second and only when the
- * spots or the block change. MiniHUD and Litematica are both optional and reached only when
+ * [gather]); the placement is brought up to date on the client tick, at most twice a second and
+ * only when the spots or the block change ([LitematicaPlacement]). MiniHUD and Litematica are both optional and reached only when
  * installed; nothing of either is copied here.
  */
 object SpawnProofing {
@@ -78,13 +78,6 @@ object SpawnProofing {
     @Volatile
     private var shownSpots: LongArray? = null
 
-    /**
-     * The placement's box (min x, y, z, max x, y, z), also read by Litematica's chunk builder
-     * threads: inside it, where the placement holds air, Litematica would mark any block of yours
-     * as an extra block, a spot you have already covered or just the ground around the spots.
-     */
-    @Volatile
-    private var shownBox: IntArray? = null
     private var shownState: BlockState? = null
 
     /** The block in use, kept while you hold something else so the schematic does not flicker. */
@@ -207,20 +200,20 @@ object SpawnProofing {
     @JvmStatic
     fun blockChanged(pos: BlockPos) {
         val spots = shownSpots ?: return
-        if (!outlineStale && java.util.Arrays.binarySearch(spots, pos.asLong()) >= 0) outlineStale = true
+        if (!outlineStale && holds(spots, pos.asLong())) outlineStale = true
     }
 
     /**
      * Called by `ChunkRendererSchematicVboMixin`, on Litematica's chunk builder threads, for each
      * block Litematica is about to draw its overlay box on: true for spawn proofing's own spots,
      * which get this mod's [fill] instead, in the colour, opacity and height you set. Your other
-     * placements keep Litematica's overlay, and Easy Place is untouched.
+     * placements keep Litematica's overlay.
      */
     @JvmStatic
-    fun coversLitematicaOverlay(pos: BlockPos): Boolean {
-        val spots = shownSpots ?: return false
-        return java.util.Arrays.binarySearch(spots, pos.asLong()) >= 0
-    }
+    fun coversLitematicaOverlay(pos: BlockPos): Boolean = holds(shownSpots ?: return false, pos.asLong())
+
+    /** Whether the sorted [spots] hold [packed]. */
+    private fun holds(spots: LongArray, packed: Long): Boolean = java.util.Arrays.binarySearch(spots, packed) >= 0
 
     /**
      * Called by `ChunkRendererSchematicVboMixin` for each block Litematica is about to draw: true
@@ -251,15 +244,14 @@ object SpawnProofing {
 
     /**
      * Whether Litematica's overlay at [pos], where the schematic holds [schematicAir], belongs to
-     * spawn proofing: one of its spots, or a spot already covered (inside its box, where the
-     * placement holds air and you have put a block), which Litematica would mark as extra.
+     * spawn proofing: one of its spots, or any block of yours inside its box where the placement
+     * holds air (a spot already covered, or the ground around the spots), which Litematica would
+     * mark as extra.
      */
     @JvmStatic
     fun ownsLitematicaOverlay(pos: BlockPos, schematicAir: Boolean): Boolean {
         if (coversLitematicaOverlay(pos)) return true
-        if (!schematicAir) return false
-        val box = shownBox ?: return false
-        return pos.x >= box[0] && pos.y >= box[1] && pos.z >= box[2] && pos.x <= box[3] && pos.y <= box[4] && pos.z <= box[5]
+        return schematicAir && LitematicaPlacement.inBox(pos.x, pos.y, pos.z)
     }
 
     /**
@@ -353,7 +345,6 @@ object SpawnProofing {
         if (state == shownState && spots.contentEquals(shownSpots)) return
         try {
             LitematicaPlacement.show(spots, state)
-            shownBox = LitematicaPlacement.box
             shownSpots = spots
             shownState = state
             outlineStale = true
@@ -419,7 +410,7 @@ object SpawnProofing {
         var t = 0.0
         while (t <= reach) {
             pos.set(eye.x + look.x * t, eye.y + look.y * t, eye.z + look.z * t)
-            if (java.util.Arrays.binarySearch(spots, pos.asLong()) >= 0) return true
+            if (holds(spots, pos.asLong())) return true
             if (!level.getBlockState(pos).canBeReplaced()) return false
             t += STEP
         }
@@ -430,7 +421,6 @@ object SpawnProofing {
     fun clear() {
         if (shownSpots == null) return
         shownSpots = null
-        shownBox = null
         shownState = null
         outlineStale = true
         try {

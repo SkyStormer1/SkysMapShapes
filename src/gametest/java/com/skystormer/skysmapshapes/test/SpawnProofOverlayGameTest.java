@@ -111,15 +111,6 @@ public class SpawnProofOverlayGameTest implements FabricClientGameTest {
             context.waitTicks(5);
 
             shot(context, "overlay-1-16-aqua-25pct", null, null, null);
-            // Vanilla's chunk borders (F3+G) are depth-tested gizmo lines too: do they show here?
-            context.getInput().holdKey(com.mojang.blaze3d.platform.InputConstants.KEY_F3);
-            context.getInput().pressKey(com.mojang.blaze3d.platform.InputConstants.KEY_G);
-            context.getInput().releaseKey(com.mojang.blaze3d.platform.InputConstants.KEY_F3);
-            context.waitTicks(5);
-            context.takeScreenshot("vanilla-chunk-borders");
-            context.getInput().holdKey(com.mojang.blaze3d.platform.InputConstants.KEY_F3);
-            context.getInput().pressKey(com.mojang.blaze3d.platform.InputConstants.KEY_G);
-            context.getInput().releaseKey(com.mojang.blaze3d.platform.InputConstants.KEY_F3);
             shot(context, "overlay-1-16-green-40pct", Colours.GREEN.getArgb(), 0.40f, 1);
             shot(context, "overlay-1-16-white-15pct", Colours.WHITE.getArgb(), 0.15f, 1);
             shot(context, "overlay-half-aqua-25pct", Colours.AQUA.getArgb(), 0.25f, 8);

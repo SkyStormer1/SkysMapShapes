@@ -33,9 +33,12 @@ internal object LitematicaPlacement {
     private var shownState: BlockState? = null
     private val shown = LongOpenHashSet()
 
-    /** The placement's box: min x, y, z, then max x, y, z; null when there is none. */
-    var box: IntArray? = null
-        private set
+    /**
+     * The placement's box: min x, y, z, then max x, y, z; null when there is none. Also read by
+     * Litematica's chunk builder threads ([inBox]).
+     */
+    @Volatile
+    private var box: IntArray? = null
 
     /** Shows [state] at every one of [spots] (packed block positions), replacing what was shown. */
     fun show(spots: LongArray, state: BlockState) {
@@ -52,7 +55,7 @@ internal object LitematicaPlacement {
         val box = box ?: return false
         val container = container ?: return false
         val world = SchematicWorldHandler.getSchematicWorld() ?: return false
-        if (spots.any { !inside(box, it) }) return false
+        if (spots.any { !inside(box, BlockPos.getX(it), BlockPos.getY(it), BlockPos.getZ(it)) }) return false
         val wanted = LongOpenHashSet(spots)
         val state = shownState ?: return false
         val chunks = LongOpenHashSet()
@@ -149,10 +152,11 @@ internal object LitematicaPlacement {
         DataManager.getSchematicPlacementManager().removeSchematicPlacement(old, false)
     }
 
-    private fun inside(box: IntArray, spot: Long): Boolean {
-        val x = BlockPos.getX(spot); val y = BlockPos.getY(spot); val z = BlockPos.getZ(spot)
-        return x >= box[0] && y >= box[1] && z >= box[2] && x <= box[3] && y <= box[4] && z <= box[5]
-    }
+    /** Whether x, y, z is inside the placement's box. */
+    fun inBox(x: Int, y: Int, z: Int): Boolean = inside(box ?: return false, x, y, z)
+
+    private fun inside(box: IntArray, x: Int, y: Int, z: Int): Boolean =
+        x >= box[0] && y >= box[1] && z >= box[2] && x <= box[3] && y <= box[4] && z <= box[5]
 
     private fun chunkKey(x: Int, z: Int): Long = (x.toLong() shl 32) or (z.toLong() and 0xFFFFFFFFL)
     private fun chunkX(key: Long): Int = (key shr 32).toInt()
