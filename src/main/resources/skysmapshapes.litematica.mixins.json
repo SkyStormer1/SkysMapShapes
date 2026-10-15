@@ -4,7 +4,8 @@
   "plugin": "com.skystormer.skysmapshapes.mixin.litematica.LitematicaMixinPlugin",
   "compatibilityLevel": "JAVA_${java_version}",
   "client": [
-    "ChunkRendererSchematicVboMixin"
+    "ChunkRendererSchematicVboMixin",
+    "EasyPlaceUtilsMixin"
   ],
   "injectors": {
     "defaultRequire": 0

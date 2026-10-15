@@ -58,6 +58,20 @@ public class SpawnProofOverlayGameTest implements FabricClientGameTest {
             LOG.info("spawn proofing spots shown: {}, fill boxes: {}", spots, fillBoxes(context));
             if (spots < 100) throw new AssertionError("expected the room's floor as spots, got " + spots);
 
+            // Easy Place must not stop vanilla placing around the spots: the room's walls and air are
+            // inside spawn proofing's placement, where it holds air.
+            boolean blocked = context.computeOnClient(c -> {
+                try {
+                    var m = Class.forName("fi.dy.masa.litematica.util.EasyPlaceUtils").getDeclaredMethod("isPositionWithinRangeOfSchematicRegions", BlockPos.class, int.class);
+                    m.setAccessible(true);
+                    return (Boolean) m.invoke(null, new BlockPos(0, 101, 0), 2) || (Boolean) m.invoke(null, new BlockPos(8, 102, -8), 2);
+                } catch (ReflectiveOperationException e) {
+                    throw new AssertionError(e);
+                }
+            });
+            LOG.info("Easy Place sees spawn proofing as a schematic to protect: {}", blocked);
+            if (blocked) throw new AssertionError("Easy Place still guards spawn proofing's placement");
+
             // Covering a spot, and uncovering it, changes the placement in place: no new placement, no blink.
             Object before = placement(context);
             server.runCommand("setblock -4 100 -8 stone_slab");

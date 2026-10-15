@@ -133,6 +133,9 @@ internal object LitematicaPlacement {
         }
     }
 
+    /** Whether [other] is spawn proofing's placement. */
+    fun owns(other: SchematicPlacement): Boolean = other === placement
+
     /** Whether Litematica's Easy Place is on. */
     fun easyPlaceOn(): Boolean = Configs.Generic.EASY_PLACE_MODE.booleanValue
 

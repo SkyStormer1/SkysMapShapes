@@ -230,6 +230,15 @@ object SpawnProofing {
     @JvmStatic
     fun hidesLitematicaBlock(pos: BlockPos): Boolean = !Config.spawnProofGhostBlocks && coversLitematicaOverlay(pos)
 
+    /**
+     * Called by `EasyPlaceUtilsMixin`: true for spawn proofing's own placement, which Easy Place then
+     * leaves out when it decides whether you are aiming near a schematic. Its empty blocks (around
+     * and between the spots) would otherwise stop you placing anything there but the slabs.
+     */
+    @JvmStatic
+    fun isOwnPlacement(placement: Any?): Boolean =
+        placement is fi.dy.masa.litematica.schematic.placement.SchematicPlacement && LitematicaPlacement.owns(placement)
+
     /** Draws spawn proofing's part of Litematica again, after a setting changed how it is drawn. */
     fun redrawLitematica() {
         if (!installed || broken) return
