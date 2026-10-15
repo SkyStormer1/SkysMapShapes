@@ -81,6 +81,12 @@ object Config {
     /** How see-through that layer is: 0 for not drawn at all, 1 for solid. */
     var spawnProofOpacity = 0.25f
 
+    /**
+     * Whether Litematica's own ghost blocks show on the spots. Off, only this mod's layer marks
+     * them; Easy Place puts the blocks down just the same.
+     */
+    var spawnProofGhostBlocks = true
+
     /** How tall that layer is, in sixteenths of a block, from [MIN_SPAWN_PROOF_HEIGHT] to a whole block. */
     var spawnProofHeight = 2
 
@@ -186,6 +192,7 @@ object Config {
             spawnProofRange = (json.get("spawnProofRange")?.asInt ?: spawnProofRange).coerceIn(MIN_SPAWN_PROOF_RANGE, MAX_SPAWN_PROOF_RANGE)
             spawnProofRenderThrough = json.get("spawnProofRenderThrough")?.asBoolean ?: spawnProofRenderThrough
             spawnProofColour = Colours.parse(json.get("spawnProofColour")?.asString) ?: spawnProofColour
+            spawnProofGhostBlocks = json.get("spawnProofGhostBlocks")?.asBoolean ?: spawnProofGhostBlocks
             spawnProofOpacity = (json.get("spawnProofOpacity")?.asFloat ?: spawnProofOpacity).coerceIn(0f, 1f)
             spawnProofHeight = (json.get("spawnProofHeight")?.asInt ?: spawnProofHeight).coerceIn(MIN_SPAWN_PROOF_HEIGHT, MAX_SPAWN_PROOF_HEIGHT)
             spawnProofBlocks = json.getAsJsonArray("spawnProofBlocks")?.map { it.asString }?.toSet() ?: spawnProofBlocks
@@ -241,6 +248,7 @@ object Config {
             json.addProperty("spawnProofRange", spawnProofRange)
             json.addProperty("spawnProofRenderThrough", spawnProofRenderThrough)
             json.addProperty("spawnProofColour", Colours.format(spawnProofColour))
+            json.addProperty("spawnProofGhostBlocks", spawnProofGhostBlocks)
             json.addProperty("spawnProofOpacity", spawnProofOpacity)
             json.addProperty("spawnProofHeight", spawnProofHeight)
             spawnProofBlocks?.let { ids -> json.add("spawnProofBlocks", JsonArray().also { a -> ids.sorted().forEach(a::add) }) }

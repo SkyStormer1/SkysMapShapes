@@ -58,6 +58,44 @@ public class SpawnProofOverlayGameTest implements FabricClientGameTest {
             LOG.info("spawn proofing spots shown: {}, fill boxes: {}", spots, fillBoxes(context));
             if (spots < 100) throw new AssertionError("expected the room's floor as spots, got " + spots);
 
+            // Covering a spot, and uncovering it, changes the placement in place: no new placement, no blink.
+            Object before = placement(context);
+            server.runCommand("setblock -4 100 -8 stone_slab");
+            context.waitTicks(60);
+            int covered = shownSpots(context);
+            Object afterCover = placement(context);
+            server.runCommand("setblock -4 100 -8 air");
+            context.waitTicks(60);
+            int uncovered = shownSpots(context);
+            Object afterUncover = placement(context);
+            LOG.info("spots {} -> covered {} -> uncovered {}; same placement: {} {}", spots, covered, uncovered, before == afterCover, before == afterUncover);
+            if (covered != spots - 1 || uncovered != spots) throw new AssertionError("the spot did not come and go");
+            if (before != afterCover || before != afterUncover) throw new AssertionError("a new placement was made instead of changing it in place");
+
+            // The settings: the main screen and the new light levels screen, checked to fit.
+            context.setScreen(() -> new com.skystormer.skysmapshapes.gui.ConfigScreen(null));
+            context.waitTicks(5);
+            context.takeScreenshot("settings-main");
+            context.setScreen(() -> new com.skystormer.skysmapshapes.gui.LightLevelsScreen(null));
+            context.waitTicks(5);
+            context.takeScreenshot("settings-light-levels");
+            String problem = context.computeOnClient(c -> {
+                var screen = c.gui.screen();
+                var widgets = screen.children().stream().filter(w -> w instanceof net.minecraft.client.gui.components.AbstractWidget)
+                        .map(w -> (net.minecraft.client.gui.components.AbstractWidget) w).toList();
+                for (var w : widgets) {
+                    if (w.getX() < 0 || w.getRight() > screen.width) return w.getMessage().getString() + " runs off the side";
+                    for (var o : widgets) {
+                        if (o != w && w.getRectangle().intersects(o.getRectangle())) return w.getMessage().getString() + " overlaps " + o.getMessage().getString();
+                    }
+                }
+                return null;
+            });
+            LOG.info("light levels screen layout: {}", problem == null ? "fits" : problem);
+            if (problem != null) throw new AssertionError(problem);
+            context.setScreen(() -> null);
+            context.waitTicks(5);
+
             shot(context, "overlay-1-16-aqua-25pct", null, null, null);
             // Vanilla's chunk borders (F3+G) are depth-tested gizmo lines too: do they show here?
             context.getInput().holdKey(com.mojang.blaze3d.platform.InputConstants.KEY_F3);
@@ -87,6 +125,18 @@ public class SpawnProofOverlayGameTest implements FabricClientGameTest {
             context.waitTicks(40);
         }
         context.takeScreenshot(name);
+    }
+
+    private static Object placement(ClientGameTestContext context) {
+        return context.computeOnClient(c -> {
+            try {
+                var f = Class.forName("com.skystormer.skysmapshapes.LitematicaPlacement").getDeclaredField("placement");
+                f.setAccessible(true);
+                return f.get(null);
+            } catch (ReflectiveOperationException e) {
+                throw new AssertionError(e);
+            }
+        });
     }
 
     private static int fillBoxes(ClientGameTestContext context) {

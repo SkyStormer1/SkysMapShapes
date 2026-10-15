@@ -80,8 +80,8 @@ object SpawnProofing {
 
     /**
      * The placement's box (min x, y, z, max x, y, z), also read by Litematica's chunk builder
-     * threads: inside it, where the placement holds air, a block of yours is a spot you have
-     * already covered, which Litematica would otherwise mark as an extra block.
+     * threads: inside it, where the placement holds air, Litematica would mark any block of yours
+     * as an extra block, a spot you have already covered or just the ground around the spots.
      */
     @Volatile
     private var shownBox: IntArray? = null
@@ -210,17 +210,6 @@ object SpawnProofing {
         if (!outlineStale && java.util.Arrays.binarySearch(spots, pos.asLong()) >= 0) outlineStale = true
     }
 
-    /** The smallest box around [spots]: min x, y, z, then max x, y, z. */
-    private fun boxOf(spots: LongArray): IntArray {
-        val box = intArrayOf(Int.MAX_VALUE, Int.MAX_VALUE, Int.MAX_VALUE, Int.MIN_VALUE, Int.MIN_VALUE, Int.MIN_VALUE)
-        for (spot in spots) {
-            val x = BlockPos.getX(spot); val y = BlockPos.getY(spot); val z = BlockPos.getZ(spot)
-            if (x < box[0]) box[0] = x; if (y < box[1]) box[1] = y; if (z < box[2]) box[2] = z
-            if (x > box[3]) box[3] = x; if (y > box[4]) box[4] = y; if (z > box[5]) box[5] = z
-        }
-        return box
-    }
-
     /**
      * Called by `ChunkRendererSchematicVboMixin`, on Litematica's chunk builder threads, for each
      * block Litematica is about to draw its overlay box on: true for spawn proofing's own spots,
@@ -231,6 +220,24 @@ object SpawnProofing {
     fun coversLitematicaOverlay(pos: BlockPos): Boolean {
         val spots = shownSpots ?: return false
         return java.util.Arrays.binarySearch(spots, pos.asLong()) >= 0
+    }
+
+    /**
+     * Called by `ChunkRendererSchematicVboMixin` for each block Litematica is about to draw: true
+     * to leave out its ghost block, when the setting hides Litematica's blocks on spawn proofing's
+     * spots. Easy Place still sees them; only the drawing is skipped.
+     */
+    @JvmStatic
+    fun hidesLitematicaBlock(pos: BlockPos): Boolean = !Config.spawnProofGhostBlocks && coversLitematicaOverlay(pos)
+
+    /** Draws spawn proofing's part of Litematica again, after a setting changed how it is drawn. */
+    fun redrawLitematica() {
+        if (!installed || broken) return
+        try {
+            LitematicaPlacement.redraw()
+        } catch (e: Throwable) {
+            Log.error("Could not ask Litematica to draw spawn proofing again", e)
+        }
     }
 
     /**
@@ -337,7 +344,7 @@ object SpawnProofing {
         if (state == shownState && spots.contentEquals(shownSpots)) return
         try {
             LitematicaPlacement.show(spots, state)
-            shownBox = boxOf(spots)
+            shownBox = LitematicaPlacement.box
             shownSpots = spots
             shownState = state
             outlineStale = true
