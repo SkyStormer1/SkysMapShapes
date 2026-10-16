@@ -90,6 +90,13 @@ MiniHUD is optional. When it is installed, this mod and MiniHUD work as one:
   mobs spawn (nether wastes, crimson forest, soul sand valley, basalt deltas), and red nether wart
   blocks do not count in a crimson forest, where nothing spawns on them. The colours still follow
   light, as only wither skeletons, skeletons and endermen need the dark.
+- **Spawn proofing with Easy Place** (needs Litematica too). Every dark spot MiniHUD's light level
+  overlay marks, inside shapes set to spawn-proof (right-click a shape) or everywhere if you choose,
+  becomes a spot Litematica's Easy Place fills, with its own overlay colour, opacity and height.
+  **Blocks…** picks which blocks count as proofing (slabs by default; trapdoors, buttons, carpets,
+  pressure plates and rails too), clicking or dragging across the grid; Easy Place uses the one in
+  your hand if it is picked, or else the one you carry most. A distance slider keeps it close, and
+  MiniHUD's light level key switches it on and off. Placing anywhere else is left alone.
 - **Share MiniHUD shapes too.** The shared shape carries MiniHUD's own kind of shape, the height it
   sits at and its sizes (how tall, which way it stands, a box's top and bottom, a spawn sphere's
   margin): someone with MiniHUD gets exactly the same shape in their world, and someone without it

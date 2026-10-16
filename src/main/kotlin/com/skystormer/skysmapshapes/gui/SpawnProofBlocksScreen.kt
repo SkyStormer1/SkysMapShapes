@@ -18,8 +18,8 @@ import kotlin.math.roundToInt
 /**
  * The accepted blocks for spawn proofing: every slab, trapdoor, button, carpet, pressure plate
  * and rail as a picture, like the creative inventory. Accepted ones have a green outline; a click
- * switches one. Search by name or kind ("slab", "oak"); All and None act on what the search shows.
- * Done saves.
+ * switches one, and dragging from it switches every block passed over the same way. Search by
+ * name or kind ("slab", "oak"); All and None act on what the search shows. Done saves.
  */
 class SpawnProofBlocksScreen(private val parent: Screen?) : Screen(Component.literal("Spawn proofing blocks")) {
 
@@ -28,6 +28,9 @@ class SpawnProofBlocksScreen(private val parent: Screen?) : Screen(Component.lit
     private var shown: List<Block> = emptyList()
     private var scroll = 0
     private var draggingBar = false
+
+    /** While dragging across the grid: true to accept what is passed over, false to take it out. */
+    private var painting: Boolean? = null
 
     private var gridLeft = 0
     private var gridTop = 0
@@ -147,15 +150,12 @@ class SpawnProofBlocksScreen(private val parent: Screen?) : Screen(Component.lit
                 dragBarTo(y)
                 return true
             }
-            val column = ((x - gridLeft) / TILE).toInt()
-            val row = ((y - gridTop) / TILE).toInt()
-            if (x >= gridLeft && y >= gridTop && column in 0 until columns && row in 0 until visibleRows) {
-                val block = shown.getOrNull((row + scroll) * columns + column)
-                if (block != null) {
-                    val id = SpawnProofBlocks.id(block)
-                    if (!accepted.remove(id)) accepted += id
-                    return true
-                }
+            val block = blockAt(x, y)
+            if (block != null) {
+                val accept = SpawnProofBlocks.id(block) !in accepted
+                painting = accept
+                paint(block, accept)
+                return true
             }
         }
         return super.mouseClicked(event, doubleClick)
@@ -166,15 +166,37 @@ class SpawnProofBlocksScreen(private val parent: Screen?) : Screen(Component.lit
             dragBarTo(event.y())
             return true
         }
+        painting?.let { accept ->
+            blockAt(event.x(), event.y())?.let { paint(it, accept) }
+            return true
+        }
         return super.mouseDragged(event, dx, dy)
     }
 
     override fun mouseReleased(event: MouseButtonEvent): Boolean {
+        if (painting != null) {
+            painting = null
+            return true
+        }
         if (draggingBar) {
             draggingBar = false
             return true
         }
         return super.mouseReleased(event)
+    }
+
+    /** The block in the grid under x, y, or null. */
+    private fun blockAt(x: Double, y: Double): Block? {
+        if (x < gridLeft || y < gridTop) return null
+        val column = ((x - gridLeft) / TILE).toInt()
+        val row = ((y - gridTop) / TILE).toInt()
+        if (column !in 0 until columns || row !in 0 until visibleRows) return null
+        return shown.getOrNull((row + scroll) * columns + column)
+    }
+
+    private fun paint(block: Block, accept: Boolean) {
+        val id = SpawnProofBlocks.id(block)
+        if (accept) accepted += id else accepted -= id
     }
 
     private fun dragBarTo(mouseY: Double) {
