@@ -137,8 +137,8 @@ class SpawnProofBlocksScreen(private val parent: Screen?) : Screen(Component.lit
     }
 
     private fun trackHeight(): Int = visibleRows * TILE
-    private fun thumbHeight(): Int = (trackHeight() * visibleRows / maxOf(1, rows())).coerceIn(minOf(16, trackHeight()), trackHeight())
-    private fun thumbTop(): Int = gridTop + (trackHeight() - thumbHeight()) * scroll / maxOf(1, maxScroll())
+    private fun thumbHeight(): Int = ScrollBar.thumbHeight(trackHeight(), visibleRows, rows())
+    private fun thumbTop(): Int = ScrollBar.thumbTop(gridTop, trackHeight(), thumbHeight(), scroll, maxScroll())
     private fun barLeft(): Int = gridLeft + columns * TILE + GAP
 
     override fun mouseClicked(event: MouseButtonEvent, doubleClick: Boolean): Boolean {
@@ -200,8 +200,7 @@ class SpawnProofBlocksScreen(private val parent: Screen?) : Screen(Component.lit
     }
 
     private fun dragBarTo(mouseY: Double) {
-        val room = maxOf(1, trackHeight() - thumbHeight())
-        scroll = ((mouseY - gridTop - thumbHeight() / 2.0) / room * maxScroll()).roundToInt().coerceIn(0, maxScroll())
+        scroll = ScrollBar.scrollFor(mouseY, gridTop, trackHeight(), thumbHeight(), thumbHeight() / 2.0, maxScroll())
     }
 
     override fun mouseScrolled(mouseX: Double, mouseY: Double, scrollX: Double, scrollY: Double): Boolean {

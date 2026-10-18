@@ -44,6 +44,8 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
     private var beaconBeams = Config.beaconBeams
     private var beaconOutlines = Config.beaconOutlines
     private var beaconLimit = Config.beaconLimit
+    private var beaconDistance = Config.beaconDistance
+    private var hideGameBeams = Config.hideGameBeams
     private var beaconThroughWalls = Config.beaconThroughWalls
     private var beaconMinY = Config.beaconMinY
     private var beaconMaxY = Config.beaconMaxY
@@ -71,7 +73,9 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         fillOpacity = 0.15f
         beaconBeams = false
         beaconOutlines = false
-        beaconLimit = Config.DEFAULT_BEACON_LIMIT
+        beaconLimit = Config.MAX_BEACON_LIMIT
+        beaconDistance = Config.MAX_BEACON_DISTANCE
+        hideGameBeams = false
         beaconThroughWalls = true
         beaconMinY = Config.LOWEST_Y
         beaconMaxY = Config.HIGHEST_Y
@@ -106,36 +110,55 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         rebuildWidgets()
     }
 
-    /** Settings still being tried out; all off as the mod comes. */
+    /**
+     * Settings still being tried out; all off as the mod comes. Grouped under headings: what is
+     * drawn, how far out, and at what heights.
+     */
     private fun experimentalPage(left: Int, top: Int) {
         var y = top
         val about = "Still being tried out: these may change or go in a later version."
         addRenderableWidget(MultiLineTextWidget(left, y, Component.literal(about), font).setMaxWidth(panelWidth))
         y += font.lineHeight * font.split(Component.literal(about), panelWidth).size + GAP * 3
-        val halfRow = (panelWidth - GAP) / 2
-        addRenderableWidget(toggle(left, y, halfRow, "Beacon beams", beaconBeams,
+        val half = (panelWidth - GAP) / 2
+        val third = (panelWidth - GAP * 2) / 3
+
+        y = heading(left, y, "Beacons: what is drawn")
+        addRenderableWidget(toggle(left, y, third, "Beams", beaconBeams,
             "Draws a beam straight up from every beacon near you, lit or not.") { beaconBeams = it })
-        addRenderableWidget(toggle(left + halfRow + GAP, y, panelWidth - halfRow - GAP, "Blocked outlines", beaconOutlines,
+        addRenderableWidget(toggle(left + third + GAP, y, third, "Blocked", beaconOutlines,
             "Outlines in red every block in a beacon's way: the ones to break to light it. As in the game, only full solid " +
                 "blocks stop it: glass, leaves, slabs, stairs, anvils, chains, honey and bedrock let it through, but tinted glass does not.") {
             beaconOutlines = it
         })
+        // On means the game draws its beams; off hides them, so only this mod's show.
+        addRenderableWidget(toggle(left + (third + GAP) * 2, y, panelWidth - (third + GAP) * 2, "Game beams", !hideGameBeams,
+            "The game's own beacon beams. Off hides them, so only the beams above show, or none at all.") { hideGameBeams = !it })
         y += ROW + GAP
-        val min = Config.MIN_BEACON_LIMIT.toFloat()
-        val max = Config.MAX_BEACON_LIMIT.toFloat()
-        addRenderableWidget(Slider(left, y, panelWidth, toSlider(beaconLimit.toFloat(), min, max),
-            { "Beacons: up to ${lerp(it, min, max, BEACON_STEP).roundToInt()}" },
-            "How many beacons get a beam at most, the nearest to you first. More costs more to draw.") {
-            beaconLimit = lerp(it, min, max, BEACON_STEP).roundToInt()
-        })
-        y += ROW + GAP
-        addRenderableWidget(toggle(left, y, panelWidth, "Outlines through walls", beaconThroughWalls,
+        addRenderableWidget(toggle(left, y, panelWidth, "Blocked: through walls", beaconThroughWalls,
             "On: the blocks in a beam's way are outlined through everything in front of them. Off: only where you can see them.") {
             beaconThroughWalls = it
         })
-        y += ROW + GAP
+        y += ROW + GAP * 3
+
+        y = heading(left, y, "Beacons: how far")
+        val near = Config.MIN_BEACON_DISTANCE.toFloat()
+        val far = Config.MAX_BEACON_DISTANCE.toFloat()
+        addRenderableWidget(Slider(left, y, half, toSlider(beaconDistance.toFloat(), near, far),
+            { "Distance: ${lerp(it, near, far, 1f).roundToInt()} chunks" },
+            "How far out beacons are looked for, in chunks, as a circle around you. Never past the chunks the game has loaded (your render distance).") {
+            beaconDistance = lerp(it, near, far, 1f).roundToInt()
+        })
+        val fewest = Config.MIN_BEACON_LIMIT.toFloat()
+        val most = Config.MAX_BEACON_LIMIT.toFloat()
+        addRenderableWidget(Slider(left + half + GAP, y, panelWidth - half - GAP, toSlider(beaconLimit.toFloat(), fewest, most),
+            { "Up to ${lerp(it, fewest, most, BEACON_STEP).roundToInt()} beacons" },
+            "How many beacons get a beam at most, the nearest to you first. More costs more to draw.") {
+            beaconLimit = lerp(it, fewest, most, BEACON_STEP).roundToInt()
+        })
+        y += ROW + GAP * 3
+
         // From and to, side by side; each keeps clear of the other, so the range never turns inside out.
-        val half = (panelWidth - GAP) / 2
+        y = heading(left, y, "Beacons: heights drawn")
         val low = Config.LOWEST_Y.toFloat()
         val high = Config.HIGHEST_Y.toFloat()
         addRenderableWidget(Slider(left, y, half, toSlider(beaconMinY.toFloat(), low, high),
@@ -148,6 +171,12 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
             "The highest height beams and the blocks in their way are drawn at.") {
             beaconMaxY = lerp(it, low, high, 1f).roundToInt().coerceAtLeast(beaconMinY)
         })
+    }
+
+    /** A heading over a group of settings; returns the y under it. */
+    private fun heading(left: Int, y: Int, text: String): Int {
+        addRenderableWidget(StringWidget(left, y, panelWidth, font.lineHeight, Component.literal(text), font))
+        return y + font.lineHeight + GAP * 2
     }
 
     /** Where shapes show, how they look, and the presets. */
@@ -203,8 +232,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
             "How strongly the inside of a filled shape is shaded.") { fillOpacity = lerp(it, 0f, 1f, 0.05f) })
         y += ROW + GAP * 3
 
-        addRenderableWidget(StringWidget(left, y, panelWidth, font.lineHeight, Component.literal("Presets: circles offered when adding a shape"), font))
-        y += font.lineHeight + GAP * 2
+        y = heading(left, y, "Presets: circles offered when adding a shape")
 
         val nameWidth = panelWidth / 2
         val radiusWidth = panelWidth / 6
@@ -279,6 +307,8 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         Config.beaconBeams = beaconBeams
         Config.beaconOutlines = beaconOutlines
         Config.beaconLimit = beaconLimit
+        Config.beaconDistance = beaconDistance
+        Config.hideGameBeams = hideGameBeams
         Config.beaconThroughWalls = beaconThroughWalls
         Config.beaconMinY = beaconMinY
         Config.beaconMaxY = beaconMaxY
@@ -308,7 +338,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         const val WIDTH = 300
         const val ROW = 20
         const val GAP = 2
-        private const val BEACON_STEP = 250f
+        private const val BEACON_STEP = 50f
 
         /** An on/off button with a tooltip. */
         fun toggle(x: Int, y: Int, width: Int, name: String, value: Boolean, explanation: String, onChange: (Boolean) -> Unit): CycleButton<Boolean> =

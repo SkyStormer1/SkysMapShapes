@@ -154,7 +154,13 @@ object Config {
     var beaconOutlines = false
 
     /** How many beacons get a beam at most, the nearest first. */
-    var beaconLimit = DEFAULT_BEACON_LIMIT
+    var beaconLimit = MAX_BEACON_LIMIT
+
+    /** How far out, in chunks, beacons are looked for; never past the chunks the game has loaded. */
+    var beaconDistance = MAX_BEACON_DISTANCE
+
+    /** Experimental: the game's own beacon beams are not drawn, so only this mod's show. */
+    var hideGameBeams = false
 
     /** The blocks in a beam's way are outlined through walls, rather than only where in sight. */
     var beaconThroughWalls = true
@@ -176,9 +182,10 @@ object Config {
         Preset("No despawn", 32.0, Colours.GREEN.argb),
     )
 
-    const val MIN_BEACON_LIMIT = 1000
-    const val MAX_BEACON_LIMIT = 10000
-    const val DEFAULT_BEACON_LIMIT = 1000
+    const val MIN_BEACON_LIMIT = 50
+    const val MAX_BEACON_LIMIT = 1000
+    const val MIN_BEACON_DISTANCE = 1
+    const val MAX_BEACON_DISTANCE = 32
 
     /** The heights beacon beams can be limited to: the lowest and highest any dimension builds at. */
     const val LOWEST_Y = -64
@@ -245,6 +252,8 @@ object Config {
             beaconBeams = json.get("beaconBeams")?.asBoolean ?: beaconBeams
             beaconOutlines = json.get("beaconOutlines")?.asBoolean ?: beaconOutlines
             beaconLimit = (json.get("beaconLimit")?.asInt ?: beaconLimit).coerceIn(MIN_BEACON_LIMIT, MAX_BEACON_LIMIT)
+            beaconDistance = (json.get("beaconDistance")?.asInt ?: beaconDistance).coerceIn(MIN_BEACON_DISTANCE, MAX_BEACON_DISTANCE)
+            hideGameBeams = json.get("hideGameBeams")?.asBoolean ?: hideGameBeams
             beaconThroughWalls = json.get("beaconThroughWalls")?.asBoolean ?: beaconThroughWalls
             beaconMinY = (json.get("beaconMinY")?.asInt ?: beaconMinY).coerceIn(LOWEST_Y, HIGHEST_Y)
             beaconMaxY = (json.get("beaconMaxY")?.asInt ?: beaconMaxY).coerceIn(beaconMinY, HIGHEST_Y)
@@ -306,6 +315,8 @@ object Config {
             json.addProperty("beaconBeams", beaconBeams)
             json.addProperty("beaconOutlines", beaconOutlines)
             json.addProperty("beaconLimit", beaconLimit)
+            json.addProperty("beaconDistance", beaconDistance)
+            json.addProperty("hideGameBeams", hideGameBeams)
             json.addProperty("beaconThroughWalls", beaconThroughWalls)
             json.addProperty("beaconMinY", beaconMinY)
             json.addProperty("beaconMaxY", beaconMaxY)

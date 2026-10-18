@@ -125,19 +125,24 @@ that MiniHUD drawing it may slow the game.
 Settings still being tried out, on the settings screen's **Experimental** tab. All are off until you
 turn them on.
 
-- **Beacon beams** and **Blocked outlines**, each switched on its own: a beam straight up from every
-  beacon near you, lit or not, and a red outline, through walls, around every block in its way, so
-  you know what to break to light it. Blocks count as
-  in the way just as the game decides: only full solid blocks that let no light through, except
-  bedrock. Glass, leaves, slabs, stairs, fences, anvils, chains, honey, slime and ice let the beam
-  through; tinted glass does not.
-  - **Beacons: up to** (1,000 to 10,000): how many beacons get a beam, the nearest first. Beacons are
-    looked for in every chunk loaded around you. Each unbroken run of blocks in a beam's way is
-    outlined as one box, so even a big beacon wall stays quick to draw.
-  - **Outlines through walls**: on to see the blocks in the way through everything, off to see them
+Beacons, under three headings:
+
+- **What is drawn:**
+  - **Beams** and **Blocked**, each switched on its own: a beam straight up from every beacon near
+    you, lit or not, and a red outline around every block in its way, so you know what to break to
+    light it. Blocks count as in the way just as the game decides: only full solid blocks that let
+    no light through, except bedrock. Glass, leaves, slabs, stairs, fences, anvils, chains, honey,
+    slime and ice let the beam through; tinted glass does not. Each unbroken run of blocks in a
+    beam's way is outlined as one box, so even a big beacon wall stays quick to draw.
+  - **Game beams**: off hides the game's own beacon beams.
+  - **Blocked: through walls**: on to see the blocks in the way through everything, off to see them
     only where they're in sight.
-  - **From Y / To Y**: only the beams and blocks between these heights are drawn. Set From Y to 128
-    in the Nether to see only what's above the roof.
+- **How far:**
+  - **Distance** (1 to 32 chunks): how far out beacons are looked for, as a circle around you, and
+    never past your render distance.
+  - **Up to** (50 to 1,000 beacons): how many get a beam, the nearest first.
+- **Heights drawn:** **From Y / To Y**: only the beams and blocks between these heights are drawn.
+  Set From Y to 128 in the Nether to see only what's above the roof.
 
 ## Installing
 

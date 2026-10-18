@@ -11,8 +11,8 @@ import net.minecraft.world.level.chunk.LevelChunk
 import net.minecraft.world.phys.Vec3
 
 /**
- * Experimental: a beam drawn straight up from every beacon in the chunks loaded around you (up to
- * [Config.beaconLimit], nearest first), lit or not ([Config.beaconBeams]), and the blocks in its way
+ * Experimental: a beam drawn straight up from every beacon within [Config.beaconDistance] chunks of
+ * you (up to [Config.beaconLimit], nearest first), lit or not ([Config.beaconBeams]), and the blocks in its way
  * outlined in red ([Config.beaconOutlines]), each switched on its own. The outlines show through
  * walls if [Config.beaconThroughWalls], so you know what to break to light it. Only what is between
  * [Config.beaconMinY] and [Config.beaconMaxY] is drawn.
@@ -48,20 +48,25 @@ object BeaconBeams {
         }
         if (ticks++ % REFRESH_TICKS != 0) return
         try {
-            val middleX = player.blockPosition().x shr 4
-            val middleZ = player.blockPosition().z shr 4
-            // Every chunk the game has loaded around you.
-            val chunks = minecraft.options.effectiveRenderDistance.coerceIn(2, MAX_CHUNKS)
-            val found = ArrayList<Beam>()
+            val here = player.blockPosition()
+            val middleX = here.x shr 4
+            val middleZ = here.z shr 4
+            // The chunks within the distance chosen, as a circle round you, and never past what the
+            // game has loaded.
+            val chunks = minOf(Config.beaconDistance, minecraft.options.effectiveRenderDistance)
+            val found = ArrayList<BlockPos>()
             for (x in middleX - chunks..middleX + chunks) {
                 for (z in middleZ - chunks..middleZ + chunks) {
+                    val dx = x - middleX
+                    val dz = z - middleZ
+                    if (dx * dx + dz * dz > chunks * chunks) continue
                     val chunk = level.chunkSource.getChunk(x, z, false) ?: continue
-                    for (pos in beaconsIn(chunk)) found.add(beamOf(level, pos))
+                    found.addAll(beaconsIn(chunk))
                 }
             }
-            // Nearest first, so a huge beacon wall still shows the ones around you.
-            val here = player.blockPosition()
-            beams = found.sortedBy { it.pos.distSqr(here) }.take(Config.beaconLimit)
+            // Nearest first, so a huge beacon wall still shows the ones around you; only those
+            // kept have their column read.
+            beams = found.sortedBy { it.distSqr(here) }.take(Config.beaconLimit).map { beamOf(level, it) }
         } catch (e: Throwable) {
             broken = true
             beams = emptyList()
@@ -166,8 +171,6 @@ object BeaconBeams {
         if (onTop) line.setAlwaysOnTop()
     }
 
-    /** The farthest out beacons are looked for, in chunks, whatever the render distance. */
-    private const val MAX_CHUNKS = 32
     private const val REFRESH_TICKS = 20
 
     private const val BEAM_HALF = 0.2
