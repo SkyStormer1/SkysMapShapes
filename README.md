@@ -127,8 +127,9 @@ turn them on.
 
 - **Beacon beams**: draws a beam straight up from every beacon near you, lit or not, and outlines in
   red, through walls, every block in its way, so you know what to break to light it. Blocks count as
-  in the way just as the game decides: anything that blocks light completely, except bedrock. Glass,
-  leaves and slabs let the beam through.
+  in the way just as the game decides: only full solid blocks that let no light through, except
+  bedrock. Glass, leaves, slabs, stairs, fences, anvils, chains, honey, slime and ice let the beam
+  through; tinted glass does not.
 
 ## Installing
 

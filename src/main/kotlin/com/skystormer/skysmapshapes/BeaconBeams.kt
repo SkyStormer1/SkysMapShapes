@@ -15,8 +15,9 @@ import net.minecraft.world.phys.Vec3
  * it is lit or not, with every block in its way outlined in red through walls, so you know what to
  * break to light it.
  *
- * A block is in the way the way the game decides it: anything that blocks light completely, except
- * bedrock. Glass, stained glass, leaves, slabs and the like let the beam through.
+ * A block is in the way the way the game decides it: anything that blocks light completely (a
+ * full solid cube, or tinted glass), except bedrock. Glass, leaves, slabs, anvils, chains, honey
+ * and anything else that does not fill its block let the beam through.
  */
 object BeaconBeams {
 

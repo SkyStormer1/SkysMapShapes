@@ -104,8 +104,8 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         y += font.lineHeight * font.split(Component.literal(about), WIDTH).size + GAP * 3
         addRenderableWidget(toggle(left, y, WIDTH, "Beacon beams", beaconBeams,
             "Draws a beam straight up from every beacon near you, lit or not, and outlines in red, through walls, " +
-                "every block in its way: the ones to break to light it. Glass, leaves, slabs and bedrock let the beam " +
-                "through, as in the game.") { beaconBeams = it })
+                "every block in its way: the ones to break to light it. As in the game, only full solid blocks stop it: " +
+                "glass, leaves, slabs, stairs, anvils, chains, honey and bedrock let it through, but tinted glass does not.") { beaconBeams = it })
     }
 
     /** Where shapes show, how they look, and the presets. */
