@@ -82,7 +82,10 @@ object ShapesClient : ClientModInitializer {
         }
 
         // Spawn proofing's through-blocks outlines, added as each frame is gathered.
-        LevelExtractionEvents.END_EXTRACTION.register { SpawnProofing.drawOutlines() }
+        LevelExtractionEvents.END_EXTRACTION.register {
+            SpawnProofing.drawOutlines()
+            BeaconBeams.draw()
+        }
 
         // Before the game handles the use key, so Easy Place gets the swapped-in block.
         ClientTickEvents.START_CLIENT_TICK.register { client -> SpawnProofing.beforeUse(client) }
@@ -104,6 +107,7 @@ object ShapesClient : ClientModInitializer {
             MiniHudShapes.tick(client)
             LightLevels.tick()
             SpawnProofing.tick()
+            BeaconBeams.tick()
             ShapeShare.tick()
             // Hover only means anything while the world map is open.
             if (client.gui.screen()?.javaClass?.name != "xaero.map.gui.GuiMap") ShapeHover.clear()

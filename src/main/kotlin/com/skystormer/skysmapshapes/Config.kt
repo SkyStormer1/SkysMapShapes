@@ -148,6 +148,12 @@ object Config {
     var fillOpacity = 0.15f
 
     /**
+     * Experimental: a beam drawn up from every beacon near you, lit or not, with the blocks in its
+     * way outlined, so you know what to break ([BeaconBeams]).
+     */
+    var beaconBeams = false
+
+    /**
      * A radius offered as a button when adding a shape. The defaults are vanilla's despawn
      * distances; every server can change them, so they are only starting values.
      */
@@ -218,6 +224,7 @@ object Config {
             panelMaxScale = (json.get("panelMaxScale")?.asFloat ?: panelMaxScale).coerceIn(1f, 4f)
             thicknessScale = (json.get("thicknessScale")?.asFloat ?: thicknessScale).coerceIn(MIN_SCALE, MAX_SCALE)
             fillOpacity = (json.get("fillOpacity")?.asFloat ?: fillOpacity).coerceIn(0f, 1f)
+            beaconBeams = json.get("beaconBeams")?.asBoolean ?: beaconBeams
             json.getAsJsonArray("presets")?.let { array ->
                 presets = array.mapNotNull { element ->
                     val preset = element.asJsonObject
@@ -273,6 +280,7 @@ object Config {
             json.addProperty("panelMaxScale", panelMaxScale)
             json.addProperty("thicknessScale", thicknessScale)
             json.addProperty("fillOpacity", fillOpacity)
+            json.addProperty("beaconBeams", beaconBeams)
             val array = JsonArray()
             for (preset in presets) {
                 array.add(JsonObject().apply {

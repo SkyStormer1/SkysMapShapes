@@ -120,6 +120,16 @@ can be changed afterwards in MiniHUD's editor. MiniHUD's ellipsoids are at most 
 south, so a longer ellipse stays on this mod's map, and you are warned before moving a shape so big
 that MiniHUD drawing it may slow the game.
 
+## Experimental
+
+Settings still being tried out, on the settings screen's **Experimental** tab. All are off until you
+turn them on.
+
+- **Beacon beams**: draws a beam straight up from every beacon near you, lit or not, and outlines in
+  red, through walls, every block in its way, so you know what to break to light it. Blocks count as
+  in the way just as the game decides: anything that blocks light completely, except bedrock. Glass,
+  leaves and slabs let the beam through.
+
 ## Installing
 
 1. [Fabric Loader](https://fabricmc.net/use/) for Minecraft 26.3.

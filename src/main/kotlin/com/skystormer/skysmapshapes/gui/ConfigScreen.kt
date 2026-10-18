@@ -8,6 +8,7 @@ import net.minecraft.client.gui.components.AbstractSliderButton
 import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.components.CycleButton
 import net.minecraft.client.gui.components.EditBox
+import net.minecraft.client.gui.components.MultiLineTextWidget
 import net.minecraft.client.gui.components.StringWidget
 import net.minecraft.client.gui.components.Tooltip
 import net.minecraft.client.gui.screens.Screen
@@ -15,15 +16,20 @@ import net.minecraft.network.chat.Component
 import kotlin.math.roundToInt
 
 /**
- * Everything in `config/skysmapshapes.json`: where shapes show, how thick and how shaded they are,
- * and the presets offered when adding one — by default vanilla's despawn distances, which any
- * server may change, so every one can be renamed, resized, recoloured or cleared. Done saves.
+ * Everything in `config/skysmapshapes.json`, on two tabs. Shapes: where shapes show, how thick and
+ * how shaded they are, and the presets offered when adding one — by default vanilla's despawn
+ * distances, which any server may change, so every one can be renamed, resized, recoloured or
+ * cleared. Experimental: settings still being tried out, off unless you turn them on. Done saves.
  *
  * Built from plain vanilla widgets rather than a config library, like Sky's Map Exposer's.
  */
 class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal("Sky's Map Shapes")) {
 
     private class PresetDraft(var name: String, var radius: String, var colour: Int)
+
+    private enum class Page(val title: String) { SHAPES("Shapes"), EXPERIMENTAL("Experimental") }
+
+    private var page = Page.SHAPES
 
     private var showOnWorldMap = Config.showOnWorldMap
     private var showOnMinimap = Config.showOnMinimap
@@ -35,6 +41,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
     private var miniHudIncludeDisabled = Config.miniHudIncludeDisabled
     private var hideInMiniHud = Config.hideInMiniHud
     private var fillOpacity = Config.fillOpacity
+    private var beaconBeams = Config.beaconBeams
     private val presets = MutableList(Config.MAX_PRESETS) { i ->
         Config.presets.getOrNull(i)?.let { PresetDraft(it.name, Shape.number(it.radius), it.colour) }
             ?: PresetDraft("", "", Colours.entries[i % Colours.entries.size].argb)
@@ -57,10 +64,52 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         miniHudIncludeDisabled = false
         thicknessScale = 1f
         fillOpacity = 0.15f
+        beaconBeams = false
     }
 
     override fun content(top: Int) {
+        nameBoxes.clear()
+        radiusBoxes.clear()
         val left = width / 2 - WIDTH / 2
+        var y = top
+
+        // The tabs: the one showing is greyed out. The last takes what rounding leaves.
+        val tabs = Page.entries.size
+        val tabWidth = (WIDTH - GAP * (tabs - 1)) / tabs
+        Page.entries.forEachIndexed { i, tab ->
+            val x = left + i * (tabWidth + GAP)
+            addRenderableWidget(Button.builder(Component.literal(tab.title)) { switchPage(tab) }
+                .bounds(x, y, if (i < tabs - 1) tabWidth else WIDTH - (tabWidth + GAP) * i, ROW).build()
+                .also { it.active = tab != page })
+        }
+        y += ROW + GAP * 3
+
+        when (page) {
+            Page.SHAPES -> shapesPage(left, y)
+            Page.EXPERIMENTAL -> experimentalPage(left, y)
+        }
+    }
+
+    private fun switchPage(to: Page) {
+        keepEdits()
+        page = to
+        rebuildWidgets()
+    }
+
+    /** Settings still being tried out; all off as the mod comes. */
+    private fun experimentalPage(left: Int, top: Int) {
+        var y = top
+        val about = "Still being tried out: these may change or go in a later version."
+        addRenderableWidget(MultiLineTextWidget(left, y, Component.literal(about), font).setMaxWidth(WIDTH))
+        y += font.lineHeight * font.split(Component.literal(about), WIDTH).size + GAP * 3
+        addRenderableWidget(toggle(left, y, WIDTH, "Beacon beams", beaconBeams,
+            "Draws a beam straight up from every beacon near you, lit or not, and outlines in red, through walls, " +
+                "every block in its way: the ones to break to light it. Glass, leaves, slabs and bedrock let the beam " +
+                "through, as in the game.") { beaconBeams = it })
+    }
+
+    /** Where shapes show, how they look, and the presets. */
+    private fun shapesPage(left: Int, top: Int) {
         val third = (WIDTH - GAP * 2) / 3
         var y = top
 
@@ -115,8 +164,6 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         addRenderableWidget(StringWidget(left, y, WIDTH, font.lineHeight, Component.literal("Presets: circles offered when adding a shape"), font))
         y += font.lineHeight + GAP * 2
 
-        nameBoxes.clear()
-        radiusBoxes.clear()
         val nameWidth = 150
         val radiusWidth = 50
         for (preset in presets) {
@@ -167,6 +214,8 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
     }
 
     private fun keepEdits() {
+        // The preset boxes only exist while the Shapes tab is showing.
+        if (nameBoxes.size != presets.size) return
         presets.forEachIndexed { i, draft ->
             draft.name = nameBoxes[i].value
             draft.radius = radiusBoxes[i].value
@@ -185,6 +234,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         Config.miniHudIncludeDisabled = miniHudIncludeDisabled
         Config.hideInMiniHud = hideInMiniHud
         Config.fillOpacity = fillOpacity
+        Config.beaconBeams = beaconBeams
         Config.presets = presets.mapNotNull { draft ->
             val radius = draft.radius.trim().toDoubleOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null
             if (draft.name.isBlank()) return@mapNotNull null
