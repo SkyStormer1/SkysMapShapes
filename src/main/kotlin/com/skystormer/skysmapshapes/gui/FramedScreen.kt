@@ -38,6 +38,12 @@ abstract class FramedScreen(title: Component) : Screen(title) {
     private var fixed: List<AbstractWidget> = emptyList()
     private var scrolled: List<AbstractWidget> = emptyList()
 
+    /**
+     * How wide the column of settings is: [ConfigScreen.WIDTH], or narrower when the screen is,
+     * at a big GUI scale or in a small window, so nothing runs off its sides.
+     */
+    protected val panelWidth: Int get() = minOf(ConfigScreen.WIDTH, width - (BAR + 6) * 2)
+
     private fun top(): Int = HEADER
     private fun bottom(): Int = height - FOOTER
 

@@ -42,6 +42,10 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
     private var hideInMiniHud = Config.hideInMiniHud
     private var fillOpacity = Config.fillOpacity
     private var beaconBeams = Config.beaconBeams
+    private var beaconLimit = Config.beaconLimit
+    private var beaconThroughWalls = Config.beaconThroughWalls
+    private var beaconMinY = Config.beaconMinY
+    private var beaconMaxY = Config.beaconMaxY
     private val presets = MutableList(Config.MAX_PRESETS) { i ->
         Config.presets.getOrNull(i)?.let { PresetDraft(it.name, Shape.number(it.radius), it.colour) }
             ?: PresetDraft("", "", Colours.entries[i % Colours.entries.size].argb)
@@ -65,21 +69,25 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         thicknessScale = 1f
         fillOpacity = 0.15f
         beaconBeams = false
+        beaconLimit = Config.DEFAULT_BEACON_LIMIT
+        beaconThroughWalls = true
+        beaconMinY = Config.LOWEST_Y
+        beaconMaxY = Config.HIGHEST_Y
     }
 
     override fun content(top: Int) {
         nameBoxes.clear()
         radiusBoxes.clear()
-        val left = width / 2 - WIDTH / 2
+        val left = width / 2 - panelWidth / 2
         var y = top
 
         // The tabs: the one showing is greyed out. The last takes what rounding leaves.
         val tabs = Page.entries.size
-        val tabWidth = (WIDTH - GAP * (tabs - 1)) / tabs
+        val tabWidth = (panelWidth - GAP * (tabs - 1)) / tabs
         Page.entries.forEachIndexed { i, tab ->
             val x = left + i * (tabWidth + GAP)
             addRenderableWidget(Button.builder(Component.literal(tab.title)) { switchPage(tab) }
-                .bounds(x, y, if (i < tabs - 1) tabWidth else WIDTH - (tabWidth + GAP) * i, ROW).build()
+                .bounds(x, y, if (i < tabs - 1) tabWidth else panelWidth - (tabWidth + GAP) * i, ROW).build()
                 .also { it.active = tab != page })
         }
         y += ROW + GAP * 3
@@ -100,17 +108,45 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
     private fun experimentalPage(left: Int, top: Int) {
         var y = top
         val about = "Still being tried out: these may change or go in a later version."
-        addRenderableWidget(MultiLineTextWidget(left, y, Component.literal(about), font).setMaxWidth(WIDTH))
-        y += font.lineHeight * font.split(Component.literal(about), WIDTH).size + GAP * 3
-        addRenderableWidget(toggle(left, y, WIDTH, "Beacon beams", beaconBeams,
+        addRenderableWidget(MultiLineTextWidget(left, y, Component.literal(about), font).setMaxWidth(panelWidth))
+        y += font.lineHeight * font.split(Component.literal(about), panelWidth).size + GAP * 3
+        addRenderableWidget(toggle(left, y, panelWidth, "Beacon beams", beaconBeams,
             "Draws a beam straight up from every beacon near you, lit or not, and outlines in red, through walls, " +
                 "every block in its way: the ones to break to light it. As in the game, only full solid blocks stop it: " +
                 "glass, leaves, slabs, stairs, anvils, chains, honey and bedrock let it through, but tinted glass does not.") { beaconBeams = it })
+        y += ROW + GAP
+        val min = Config.MIN_BEACON_LIMIT.toFloat()
+        val max = Config.MAX_BEACON_LIMIT.toFloat()
+        addRenderableWidget(Slider(left, y, panelWidth, toSlider(beaconLimit.toFloat(), min, max),
+            { "Beacons: up to ${lerp(it, min, max, BEACON_STEP).roundToInt()}" },
+            "How many beacons get a beam at most, the nearest to you first. More costs more to draw.") {
+            beaconLimit = lerp(it, min, max, BEACON_STEP).roundToInt()
+        })
+        y += ROW + GAP
+        addRenderableWidget(toggle(left, y, panelWidth, "Outlines through walls", beaconThroughWalls,
+            "On: the blocks in a beam's way are outlined through everything in front of them. Off: only where you can see them.") {
+            beaconThroughWalls = it
+        })
+        y += ROW + GAP
+        // From and to, side by side; each keeps clear of the other, so the range never turns inside out.
+        val half = (panelWidth - GAP) / 2
+        val low = Config.LOWEST_Y.toFloat()
+        val high = Config.HIGHEST_Y.toFloat()
+        addRenderableWidget(Slider(left, y, half, toSlider(beaconMinY.toFloat(), low, high),
+            { "From Y ${lerp(it, low, high, 1f).roundToInt().coerceAtMost(beaconMaxY)}" },
+            "The lowest height beams and the blocks in their way are drawn at. At 128, only what is above the Nether's roof shows.") {
+            beaconMinY = lerp(it, low, high, 1f).roundToInt().coerceAtMost(beaconMaxY)
+        })
+        addRenderableWidget(Slider(left + half + GAP, y, panelWidth - half - GAP, toSlider(beaconMaxY.toFloat(), low, high),
+            { "To Y ${lerp(it, low, high, 1f).roundToInt().coerceAtLeast(beaconMinY)}" },
+            "The highest height beams and the blocks in their way are drawn at.") {
+            beaconMaxY = lerp(it, low, high, 1f).roundToInt().coerceAtLeast(beaconMinY)
+        })
     }
 
     /** Where shapes show, how they look, and the presets. */
     private fun shapesPage(left: Int, top: Int) {
-        val third = (WIDTH - GAP * 2) / 3
+        val third = (panelWidth - GAP * 2) / 3
         var y = top
 
         // The switch for the whole mod, the panel, and the way to the shapes list, first.
@@ -121,7 +157,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         addRenderableWidget(Button.builder(Component.literal("Shapes list…")) {
             save()
             minecraft.gui.setScreen(ShapeListScreen(this))
-        }.bounds(left + (third + GAP) * 2, y, WIDTH - (third + GAP) * 2, ROW)
+        }.bounds(left + (third + GAP) * 2, y, panelWidth - (third + GAP) * 2, ROW)
             .tooltip(Tooltip.create(Component.literal("All your shapes: show, hide, find, edit or delete them.")))
             .build())
         y += ROW + GAP * 3
@@ -143,14 +179,14 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
             addRenderableWidget(Button.builder(Component.literal("Light levels & spawn proofing…")) {
                 save()
                 minecraft.gui.setScreen(LightLevelsScreen(this))
-            }.bounds(left, y, WIDTH, ROW)
+            }.bounds(left, y, panelWidth, ROW)
                 .tooltip(Tooltip.create(Component.literal(
                     "MiniHUD's light level overlay inside your shapes, Nether spawns by biome, and Easy Place spawn proofing with its overlay."
                 ))).build())
             y += ROW + GAP
         }
 
-        val half = (WIDTH - GAP) / 2
+        val half = (panelWidth - GAP) / 2
         addRenderableWidget(Slider(left, y, half, toSlider(thicknessScale, Config.MIN_SCALE, Config.MAX_SCALE),
             { "Thickness ${(lerp(it, Config.MIN_SCALE, Config.MAX_SCALE, 0.05f) * 100).roundToInt()}%" },
             "Makes every shape's outline thicker or thinner at once, on top of each shape's own thickness (set in its Edit screen). 100% draws them as set.") {
@@ -161,11 +197,11 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
             "How strongly the inside of a filled shape is shaded.") { fillOpacity = lerp(it, 0f, 1f, 0.05f) })
         y += ROW + GAP * 3
 
-        addRenderableWidget(StringWidget(left, y, WIDTH, font.lineHeight, Component.literal("Presets: circles offered when adding a shape"), font))
+        addRenderableWidget(StringWidget(left, y, panelWidth, font.lineHeight, Component.literal("Presets: circles offered when adding a shape"), font))
         y += font.lineHeight + GAP * 2
 
-        val nameWidth = 150
-        val radiusWidth = 50
+        val nameWidth = panelWidth / 2
+        val radiusWidth = panelWidth / 6
         for (preset in presets) {
             nameBoxes.add(field(left, y, nameWidth, preset.name, "unused", 32))
             radiusBoxes.add(field(left + nameWidth + GAP, y, radiusWidth, preset.radius, "radius", 10)
@@ -175,7 +211,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
                 CycleButton.builder<Int>({ Component.literal(Colours.name(it)).withStyle { s -> s.withColor(it and 0xFFFFFF) } }, preset.colour)
                     .withValues(Colours.entries.map { it.argb }.let { if (preset.colour in it) it else listOf(preset.colour) + it })
                     .displayOnlyValue()
-                    .create(colourLeft, y, left + WIDTH - colourLeft, ROW, Component.literal("Colour")) { _, value -> preset.colour = value }
+                    .create(colourLeft, y, left + panelWidth - colourLeft, ROW, Component.literal("Colour")) { _, value -> preset.colour = value }
             )
             y += ROW + GAP
         }
@@ -191,7 +227,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
                 if (preset != null) draft.colour = preset.colour
             }
             rebuildWidgets()
-        }.bounds(left, y, WIDTH, ROW)
+        }.bounds(left, y, panelWidth, ROW)
             .tooltip(Tooltip.create(Component.literal("Back to vanilla's despawn distances: instant despawn beyond 128 blocks, no despawning within 32.")))
             .build())
     }
@@ -235,6 +271,10 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         Config.hideInMiniHud = hideInMiniHud
         Config.fillOpacity = fillOpacity
         Config.beaconBeams = beaconBeams
+        Config.beaconLimit = beaconLimit
+        Config.beaconThroughWalls = beaconThroughWalls
+        Config.beaconMinY = beaconMinY
+        Config.beaconMaxY = beaconMaxY
         Config.presets = presets.mapNotNull { draft ->
             val radius = draft.radius.trim().toDoubleOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null
             if (draft.name.isBlank()) return@mapNotNull null
@@ -261,6 +301,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         const val WIDTH = 300
         const val ROW = 20
         const val GAP = 2
+        private const val BEACON_STEP = 250f
 
         /** An on/off button with a tooltip. */
         fun toggle(x: Int, y: Int, width: Int, name: String, value: Boolean, explanation: String, onChange: (Boolean) -> Unit): CycleButton<Boolean> =

@@ -153,6 +153,16 @@ object Config {
      */
     var beaconBeams = false
 
+    /** How many beacons get a beam at most, the nearest first. */
+    var beaconLimit = DEFAULT_BEACON_LIMIT
+
+    /** The blocks in a beam's way are outlined through walls, rather than only where in sight. */
+    var beaconThroughWalls = true
+
+    /** Beams and the blocks in their way are only drawn between these heights, inclusive. */
+    var beaconMinY = LOWEST_Y
+    var beaconMaxY = HIGHEST_Y
+
     /**
      * A radius offered as a button when adding a shape. The defaults are vanilla's despawn
      * distances; every server can change them, so they are only starting values.
@@ -165,6 +175,14 @@ object Config {
         Preset("Instant despawn", 128.0, Colours.RED.argb),
         Preset("No despawn", 32.0, Colours.GREEN.argb),
     )
+
+    const val MIN_BEACON_LIMIT = 1000
+    const val MAX_BEACON_LIMIT = 10000
+    const val DEFAULT_BEACON_LIMIT = 1000
+
+    /** The heights beacon beams can be limited to: the lowest and highest any dimension builds at. */
+    const val LOWEST_Y = -64
+    const val HIGHEST_Y = 320
 
     const val MAX_PRESETS = 4
     const val MIN_SPAWN_PROOF_RANGE = 4
@@ -225,6 +243,10 @@ object Config {
             thicknessScale = (json.get("thicknessScale")?.asFloat ?: thicknessScale).coerceIn(MIN_SCALE, MAX_SCALE)
             fillOpacity = (json.get("fillOpacity")?.asFloat ?: fillOpacity).coerceIn(0f, 1f)
             beaconBeams = json.get("beaconBeams")?.asBoolean ?: beaconBeams
+            beaconLimit = (json.get("beaconLimit")?.asInt ?: beaconLimit).coerceIn(MIN_BEACON_LIMIT, MAX_BEACON_LIMIT)
+            beaconThroughWalls = json.get("beaconThroughWalls")?.asBoolean ?: beaconThroughWalls
+            beaconMinY = (json.get("beaconMinY")?.asInt ?: beaconMinY).coerceIn(LOWEST_Y, HIGHEST_Y)
+            beaconMaxY = (json.get("beaconMaxY")?.asInt ?: beaconMaxY).coerceIn(beaconMinY, HIGHEST_Y)
             json.getAsJsonArray("presets")?.let { array ->
                 presets = array.mapNotNull { element ->
                     val preset = element.asJsonObject
@@ -281,6 +303,10 @@ object Config {
             json.addProperty("thicknessScale", thicknessScale)
             json.addProperty("fillOpacity", fillOpacity)
             json.addProperty("beaconBeams", beaconBeams)
+            json.addProperty("beaconLimit", beaconLimit)
+            json.addProperty("beaconThroughWalls", beaconThroughWalls)
+            json.addProperty("beaconMinY", beaconMinY)
+            json.addProperty("beaconMaxY", beaconMaxY)
             val array = JsonArray()
             for (preset in presets) {
                 array.add(JsonObject().apply {
