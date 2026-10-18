@@ -42,6 +42,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
     private var hideInMiniHud = Config.hideInMiniHud
     private var fillOpacity = Config.fillOpacity
     private var beaconBeams = Config.beaconBeams
+    private var beaconOutlines = Config.beaconOutlines
     private var beaconLimit = Config.beaconLimit
     private var beaconThroughWalls = Config.beaconThroughWalls
     private var beaconMinY = Config.beaconMinY
@@ -69,6 +70,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         thicknessScale = 1f
         fillOpacity = 0.15f
         beaconBeams = false
+        beaconOutlines = false
         beaconLimit = Config.DEFAULT_BEACON_LIMIT
         beaconThroughWalls = true
         beaconMinY = Config.LOWEST_Y
@@ -110,10 +112,14 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         val about = "Still being tried out: these may change or go in a later version."
         addRenderableWidget(MultiLineTextWidget(left, y, Component.literal(about), font).setMaxWidth(panelWidth))
         y += font.lineHeight * font.split(Component.literal(about), panelWidth).size + GAP * 3
-        addRenderableWidget(toggle(left, y, panelWidth, "Beacon beams", beaconBeams,
-            "Draws a beam straight up from every beacon near you, lit or not, and outlines in red, through walls, " +
-                "every block in its way: the ones to break to light it. As in the game, only full solid blocks stop it: " +
-                "glass, leaves, slabs, stairs, anvils, chains, honey and bedrock let it through, but tinted glass does not.") { beaconBeams = it })
+        val halfRow = (panelWidth - GAP) / 2
+        addRenderableWidget(toggle(left, y, halfRow, "Beacon beams", beaconBeams,
+            "Draws a beam straight up from every beacon near you, lit or not.") { beaconBeams = it })
+        addRenderableWidget(toggle(left + halfRow + GAP, y, panelWidth - halfRow - GAP, "Blocked outlines", beaconOutlines,
+            "Outlines in red every block in a beacon's way: the ones to break to light it. As in the game, only full solid " +
+                "blocks stop it: glass, leaves, slabs, stairs, anvils, chains, honey and bedrock let it through, but tinted glass does not.") {
+            beaconOutlines = it
+        })
         y += ROW + GAP
         val min = Config.MIN_BEACON_LIMIT.toFloat()
         val max = Config.MAX_BEACON_LIMIT.toFloat()
@@ -271,6 +277,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         Config.hideInMiniHud = hideInMiniHud
         Config.fillOpacity = fillOpacity
         Config.beaconBeams = beaconBeams
+        Config.beaconOutlines = beaconOutlines
         Config.beaconLimit = beaconLimit
         Config.beaconThroughWalls = beaconThroughWalls
         Config.beaconMinY = beaconMinY

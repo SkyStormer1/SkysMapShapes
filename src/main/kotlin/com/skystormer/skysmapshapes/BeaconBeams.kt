@@ -11,10 +11,11 @@ import net.minecraft.world.level.chunk.LevelChunk
 import net.minecraft.world.phys.Vec3
 
 /**
- * Experimental ([Config.beaconBeams]): a beam drawn straight up from every beacon in the chunks
- * loaded around you (up to [Config.beaconLimit], nearest first), lit or not, with the blocks in its
- * way outlined in red, through walls if [Config.beaconThroughWalls], so you know what to break to
- * light it. Only what is between [Config.beaconMinY] and [Config.beaconMaxY] is drawn.
+ * Experimental: a beam drawn straight up from every beacon in the chunks loaded around you (up to
+ * [Config.beaconLimit], nearest first), lit or not ([Config.beaconBeams]), and the blocks in its way
+ * outlined in red ([Config.beaconOutlines]), each switched on its own. The outlines show through
+ * walls if [Config.beaconThroughWalls], so you know what to break to light it. Only what is between
+ * [Config.beaconMinY] and [Config.beaconMaxY] is drawn.
  *
  * A block is in the way the way the game decides it: anything that blocks light completely (a
  * full solid cube, or tinted glass), except bedrock. Glass, leaves, slabs, anvils, chains, honey
@@ -41,7 +42,7 @@ object BeaconBeams {
         val minecraft = Minecraft.getInstance()
         val level = minecraft.level
         val player = minecraft.player
-        if (!Config.enabled || !Config.beaconBeams || level == null || player == null) {
+        if (!Config.enabled || !(Config.beaconBeams || Config.beaconOutlines) || level == null || player == null) {
             beams = emptyList()
             return
         }
@@ -125,8 +126,8 @@ object BeaconBeams {
                 // Only the part of the beam inside the heights chosen.
                 val from = maxOf(b.pos.y + 1, low)
                 val to = minOf(b.top, high)
-                if (from <= to) column(x - BEAM_HALF, from.toDouble(), z - BEAM_HALF, x + BEAM_HALF, to + 1.0, z + BEAM_HALF, beam)
-                for (run in b.blocked) {
+                if (Config.beaconBeams && from <= to) column(x - BEAM_HALF, from.toDouble(), z - BEAM_HALF, x + BEAM_HALF, to + 1.0, z + BEAM_HALF, beam)
+                if (Config.beaconOutlines) for (run in b.blocked) {
                     val y1 = maxOf(run.first, low)
                     val y2 = minOf(run.last, high)
                     if (y1 > y2) continue

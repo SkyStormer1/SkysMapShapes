@@ -147,11 +147,11 @@ object Config {
     /** How opaque a filled shape's inside is, 0 to 1. */
     var fillOpacity = 0.15f
 
-    /**
-     * Experimental: a beam drawn up from every beacon near you, lit or not, with the blocks in its
-     * way outlined, so you know what to break ([BeaconBeams]).
-     */
+    /** Experimental: a beam drawn up from every beacon near you, lit or not ([BeaconBeams]). */
     var beaconBeams = false
+
+    /** Experimental: the blocks in each beacon's way outlined, so you know what to break ([BeaconBeams]). */
+    var beaconOutlines = false
 
     /** How many beacons get a beam at most, the nearest first. */
     var beaconLimit = DEFAULT_BEACON_LIMIT
@@ -243,6 +243,7 @@ object Config {
             thicknessScale = (json.get("thicknessScale")?.asFloat ?: thicknessScale).coerceIn(MIN_SCALE, MAX_SCALE)
             fillOpacity = (json.get("fillOpacity")?.asFloat ?: fillOpacity).coerceIn(0f, 1f)
             beaconBeams = json.get("beaconBeams")?.asBoolean ?: beaconBeams
+            beaconOutlines = json.get("beaconOutlines")?.asBoolean ?: beaconOutlines
             beaconLimit = (json.get("beaconLimit")?.asInt ?: beaconLimit).coerceIn(MIN_BEACON_LIMIT, MAX_BEACON_LIMIT)
             beaconThroughWalls = json.get("beaconThroughWalls")?.asBoolean ?: beaconThroughWalls
             beaconMinY = (json.get("beaconMinY")?.asInt ?: beaconMinY).coerceIn(LOWEST_Y, HIGHEST_Y)
@@ -303,6 +304,7 @@ object Config {
             json.addProperty("thicknessScale", thicknessScale)
             json.addProperty("fillOpacity", fillOpacity)
             json.addProperty("beaconBeams", beaconBeams)
+            json.addProperty("beaconOutlines", beaconOutlines)
             json.addProperty("beaconLimit", beaconLimit)
             json.addProperty("beaconThroughWalls", beaconThroughWalls)
             json.addProperty("beaconMinY", beaconMinY)

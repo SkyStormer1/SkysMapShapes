@@ -125,8 +125,9 @@ that MiniHUD drawing it may slow the game.
 Settings still being tried out, on the settings screen's **Experimental** tab. All are off until you
 turn them on.
 
-- **Beacon beams**: draws a beam straight up from every beacon near you, lit or not, and outlines in
-  red, through walls, every block in its way, so you know what to break to light it. Blocks count as
+- **Beacon beams** and **Blocked outlines**, each switched on its own: a beam straight up from every
+  beacon near you, lit or not, and a red outline, through walls, around every block in its way, so
+  you know what to break to light it. Blocks count as
   in the way just as the game decides: only full solid blocks that let no light through, except
   bedrock. Glass, leaves, slabs, stairs, fences, anvils, chains, honey, slime and ice let the beam
   through; tinted glass does not.
