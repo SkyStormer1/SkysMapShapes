@@ -11,6 +11,23 @@ internal object MiniHudGeometry {
         "despawn_sphere", "clipped_spawn_sphere_y",
     )
 
+    /** The cross-section of MiniHUD's prisms, cones and pyramids by type; null for any other type. */
+    private fun sectionOf(type: String): Volume.Section? = when (type) {
+        "circle", "cone" -> Volume.Section.CIRCLE
+        "square", "pyramid" -> Volume.Section.SQUARE
+        "rhombus", "diamond_pyramid" -> Volume.Section.RHOMBUS
+        "octagon_pyramid" -> Volume.Section.OCTAGON
+        else -> null
+    }
+
+    /** [section] around ([cx], [cz]), seen from above. */
+    private fun outline(section: Volume.Section, cx: Double, cz: Double, radius: Double): Geometry = when (section) {
+        Volume.Section.CIRCLE -> Geometry.Circle(cx, cz, radius)
+        Volume.Section.SQUARE -> Geometry.rectangle(cx - radius, cz - radius, cx + radius, cz + radius)
+        Volume.Section.RHOMBUS -> Geometry.rhombus(cx, cz, radius)
+        Volume.Section.OCTAGON -> Geometry.octagon(cx, cz, radius)
+    }
+
     fun of(type: String, json: JsonObject): Geometry? {
         // Boxes, centred boxes included, save their two corners.
         vec(json, "corner1")?.let { a ->
@@ -36,15 +53,9 @@ internal object MiniHudGeometry {
 
         // Circles, squares and rhombuses are prisms along their main axis: seen from above, an
         // upright one is its outline and one lying down is a rectangle.
-        val axis = json.get("main_axis")?.asString ?: "UP"
+        val axis = Volume.Direction.of(json.get("main_axis")?.asString)
         val height = json.get("height")?.asDouble ?: 1.0
-        if (axis == "UP" || axis == "DOWN") {
-            return when (type) {
-                "square" -> Geometry.rectangle(cx - radius, cz - radius, cx + radius, cz + radius)
-                "rhombus" -> Geometry.rhombus(cx, cz, radius)
-                else -> Geometry.Circle(cx, cz, radius)
-            }
-        }
+        if (axis.upright) return outline(sectionOf(type) ?: Volume.Section.CIRCLE, cx, cz, radius)
         return along(axis, cx, cz, radius, radius, height)
     }
 
@@ -61,15 +72,9 @@ internal object MiniHudGeometry {
         }
         if (json.has("origin_x")) {
             val origin = doubleArrayOf(json.get("origin_x").asDouble, json.get("origin_y")?.asDouble ?: return null, json.get("origin_z")?.asDouble ?: return null)
-            val section = when (type) {
-                "pyramid" -> Volume.Section.SQUARE
-                "diamond_pyramid" -> Volume.Section.RHOMBUS
-                "octagon_pyramid" -> Volume.Section.OCTAGON
-                else -> Volume.Section.CIRCLE
-            }
             return Volume.Tapered(
                 Math.floor(origin[0]).toInt(), Math.floor(origin[1]).toInt(), Math.floor(origin[2]).toInt(),
-                json.get("direction")?.asString?.uppercase() ?: "UP", section,
+                Volume.Direction.of(json.get("direction")?.asString), sectionOf(type) ?: Volume.Section.CIRCLE,
                 json.get("bottom_radius")?.asDouble ?: 0.0, json.get("top_radius")?.asDouble ?: 0.0, json.get("height")?.asInt ?: 1,
             )
         }
@@ -86,31 +91,17 @@ internal object MiniHudGeometry {
             val top = centre[1] + (radius - (json.get("top_trim")?.asDouble ?: 0.0))
             return Volume.SpawnSphere(centre[0], centre[1], centre[2], radius, margin, bottom, top)
         }
-        val section = when (type) {
-            "square" -> Volume.Section.SQUARE
-            "rhombus" -> Volume.Section.RHOMBUS
-            "circle" -> Volume.Section.CIRCLE
-            else -> return null
-        }
-        return standing(json.get("main_axis")?.asString ?: "UP", centre, section, radius, json.get("height")?.asInt ?: 1)
+        // Only the prisms are left with a centre and a radius; cones and pyramids were taken above.
+        val section = sectionOf(type)?.takeIf { type in PRISMS } ?: return null
+        return standing(Volume.Direction.of(json.get("main_axis")?.asString), centre, section, radius, json.get("height")?.asInt ?: 1)
     }
 
+    private val PRISMS = setOf("circle", "square", "rhombus")
+
     /** A cross-section stood [height] blocks along [direction] from the block holding [centre]. */
-    private fun standing(direction: String, centre: DoubleArray, section: Volume.Section, radius: Double, height: Int): Volume {
-        val (axis, step) = when (direction) {
-            "DOWN" -> Volume.Axis.Y to -1
-            "NORTH" -> Volume.Axis.Z to -1
-            "SOUTH" -> Volume.Axis.Z to 1
-            "WEST" -> Volume.Axis.X to -1
-            "EAST" -> Volume.Axis.X to 1
-            else -> Volume.Axis.Y to 1
-        }
-        val (along, u, v) = when (axis) {
-            Volume.Axis.X -> Triple(centre[0], centre[1], centre[2])
-            Volume.Axis.Y -> Triple(centre[1], centre[0], centre[2])
-            Volume.Axis.Z -> Triple(centre[2], centre[0], centre[1])
-        }
-        return Volume.Extruded(axis, Math.floor(along).toInt(), step, maxOf(1, height), u, v, section, radius)
+    private fun standing(direction: Volume.Direction, centre: DoubleArray, section: Volume.Section, radius: Double, height: Int): Volume {
+        val (along, u, v) = direction.axis.split(centre[0], centre[1], centre[2])
+        return Volume.Extruded(direction.axis, Math.floor(along).toInt(), direction.step, maxOf(1, height), u, v, section, radius)
     }
 
     /**
@@ -131,27 +122,15 @@ internal object MiniHudGeometry {
         val bottom = json.get("bottom_radius")?.asDouble ?: 0.0
         val top = json.get("top_radius")?.asDouble ?: 0.0
         val height = json.get("height")?.asDouble ?: 1.0
-        val direction = json.get("direction")?.asString?.uppercase() ?: "UP"
-        if (direction == "UP" || direction == "DOWN") {
-            val r = maxOf(bottom, top)
-            return when (type) {
-                "pyramid" -> Geometry.rectangle(cx - r, cz - r, cx + r, cz + r)
-                "diamond_pyramid" -> Geometry.rhombus(cx, cz, r)
-                "octagon_pyramid" -> Geometry.octagon(cx, cz, r)
-                else -> Geometry.Circle(cx, cz, r)
-            }
-        }
+        val direction = Volume.Direction.of(json.get("direction")?.asString)
+        if (direction.upright) return outline(sectionOf(type) ?: Volume.Section.CIRCLE, cx, cz, maxOf(bottom, top))
         return along(direction, cx, cz, bottom, top, height)
     }
 
     /** A shape lying along [direction] from ([cx], [cz]): [startRadius] wide there, [endRadius] at [length]. */
-    private fun along(direction: String, cx: Double, cz: Double, startRadius: Double, endRadius: Double, length: Double): Geometry {
-        val (dx, dz) = when (direction) {
-            "NORTH" -> 0.0 to -1.0
-            "SOUTH" -> 0.0 to 1.0
-            "WEST" -> -1.0 to 0.0
-            else -> 1.0 to 0.0
-        }
+    private fun along(direction: Volume.Direction, cx: Double, cz: Double, startRadius: Double, endRadius: Double, length: Double): Geometry {
+        val dx = if (direction.axis == Volume.Axis.X) direction.step.toDouble() else 0.0
+        val dz = if (direction.axis == Volume.Axis.Z) direction.step.toDouble() else 0.0
         // Sideways from the direction.
         val sx = -dz
         val sz = dx
@@ -516,9 +495,9 @@ internal object MiniHudGeometry {
         vec(json, "center")?.let { centre ->
             val base = Math.floor(centre[1]).toInt()
             val height = json.get("height")?.asInt ?: return base
-            return when (json.get("main_axis")?.asString) {
-                "UP" -> base + height / 2
-                "DOWN" -> base - height / 2
+            return when (json.get("main_axis")?.asString?.let(Volume.Direction::of)) {
+                Volume.Direction.UP -> base + height / 2
+                Volume.Direction.DOWN -> base - height / 2
                 else -> base
             }
         }
@@ -572,7 +551,6 @@ internal object MiniHudGeometry {
 
     private val POSITION_KEYS = setOf("center", "corner1", "corner2", "origin_x", "origin_y", "origin_z")
     private val SIZE_LIMITED_KEYS = setOf("radius", "radius_y", "radius_z", "bottom_radius", "top_radius", "height", "width", "depth", "margin", "max_radius", "max_height")
-    private val DIRECTIONS = setOf("UP", "DOWN", "NORTH", "SOUTH", "EAST", "WEST")
     private val SNAPS = setOf("none", "center", "corner")
 
     /**
@@ -593,7 +571,7 @@ internal object MiniHudGeometry {
                 "center", "corner1", "corner2" -> value.isJsonArray && value.asJsonArray.size() == 3 && value.asJsonArray.all { numberIn(it, world) }
                 in POSITION_KEYS -> numberIn(value, world)
                 in SIZE_LIMITED_KEYS -> numberIn(value, size)
-                "main_axis", "direction" -> value.isJsonPrimitive && value.asJsonPrimitive.isString && value.asString.uppercase() in DIRECTIONS
+                "main_axis", "direction" -> value.isJsonPrimitive && value.asJsonPrimitive.isString && Volume.Direction.isName(value.asString)
                 "snap" -> value.isJsonPrimitive && value.asJsonPrimitive.isString && value.asString in SNAPS
                 else -> false
             }

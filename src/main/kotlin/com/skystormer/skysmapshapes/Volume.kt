@@ -63,11 +63,9 @@ sealed interface Volume {
     }
 
     /**
-     * A cross-section stood along an axis for [length] blocks, from block [start] on that axis
-     * going [step] (1 or -1) each layer: a prism when [startRadius] and [endRadius] are equal,
-     * a cone or pyramid when they are not. ([cu], [cv]) is its middle on the other two axes.
+     * A prism: [section] the same all along [length] layers from block [start], stepping [step]
+     * (1 or -1) along [axis]. ([cu], [cv]) is its middle on the other two axes.
      */
-    /** A prism: [section] the same all along [length] layers from block [start], stepping [step] along [axis]. */
     class Extruded(
         private val axis: Axis,
         private val start: Int,
@@ -79,11 +77,7 @@ sealed interface Volume {
         private val radius: Double,
     ) : Volume {
         override fun contains(x: Int, y: Int, z: Int): Boolean {
-            val (along, u, v) = when (axis) {
-                Axis.X -> Triple(x, y, z)
-                Axis.Y -> Triple(y, x, z)
-                Axis.Z -> Triple(z, x, y)
-            }
+            val (along, u, v) = axis.split(x, y, z)
             if ((along - start) * step !in 0 until length) return false
             return section.contains(u + HALF - cu, v + HALF - cv, radius)
         }
@@ -96,7 +90,7 @@ sealed interface Volume {
      */
     class Tapered(
         private val ox: Int, private val oy: Int, private val oz: Int,
-        private val direction: String,
+        private val direction: Direction,
         private val section: Section,
         private val bottom: Double,
         private val top: Double,
@@ -107,14 +101,8 @@ sealed interface Volume {
             val dy = y - oy
             val dz = z - oz
             // The layer, and the two offsets across it, as MiniHUD's `remapToBlockPos` lays them.
-            val (layer, u, v) = when (direction) {
-                "DOWN" -> Triple(-dy, dx, dz)
-                "NORTH" -> Triple(-dz, dx, dy)
-                "SOUTH" -> Triple(dz, dx, dy)
-                "WEST" -> Triple(-dx, dy, dz)
-                "EAST" -> Triple(dx, dy, dz)
-                else -> Triple(dy, dx, dz)
-            }
+            val (along, u, v) = direction.axis.split(dx, dy, dz)
+            val layer = along * direction.step
             val layers = maxOf(1, height)
             if (layer !in 0..layers) return false
             val radius = bottom - (bottom - top) * layer / layers
@@ -122,7 +110,39 @@ sealed interface Volume {
         }
     }
 
-    enum class Axis { X, Y, Z }
+    enum class Axis {
+        X, Y, Z;
+
+        /** x, y, z as the part along this axis, then the other two in order. */
+        fun <T> split(x: T, y: T, z: T): Triple<T, T, T> = when (this) {
+            X -> Triple(x, y, z)
+            Y -> Triple(y, x, z)
+            Z -> Triple(z, x, y)
+        }
+    }
+
+    /**
+     * A way MiniHUD stands a prism (`main_axis`) or lays a cone or pyramid (`direction`): the
+     * [axis] it runs along, and which way along it ([step], 1 or -1). MiniHUD saves one in capitals
+     * and the other in small letters; either is read, and anything else is [UP].
+     */
+    enum class Direction(val axis: Axis, val step: Int) {
+        UP(Axis.Y, 1),
+        DOWN(Axis.Y, -1),
+        NORTH(Axis.Z, -1),
+        SOUTH(Axis.Z, 1),
+        WEST(Axis.X, -1),
+        EAST(Axis.X, 1);
+
+        /** Upright, so from above it is just its cross-section. */
+        val upright: Boolean get() = axis == Axis.Y
+
+        companion object {
+            fun of(name: String?): Direction = entries.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: UP
+
+            fun isName(name: String): Boolean = entries.any { it.name.equals(name, ignoreCase = true) }
+        }
+    }
 
     /** The shape across an [Extruded] volume, [du] and [dv] from its middle. */
     enum class Section {
