@@ -257,6 +257,11 @@ internal object MiniHudGeometry {
 
     private fun millions(blocks: Double) = Shape.number(Math.round(blocks / 100_000) / 10.0)
 
+    /** A count of blocks for the player, roughly: "4,800" or "12.6 million". */
+    fun aboutBlocks(blocks: Double): String =
+        if (blocks >= 1_000_000) "${millions(blocks)} million"
+        else String.format(java.util.Locale.ROOT, "%,d", maxOf(1L, Math.round(blocks / 100) * 100))
+
     /** The biggest [shape] could be as [form] and still go into MiniHUD, said for the player. */
     private fun largest(shape: Shape, form: Form?): String {
         fun scaled(k: Double) = shape.copy(radius = shape.radius * k, width = shape.width * k, length = shape.length * k)
@@ -271,8 +276,89 @@ internal object MiniHudGeometry {
         else "As this, it can be at most about ${Math.floor(most.width).toInt()} × ${Math.floor(most.length).toInt()} blocks."
     }
 
+    /**
+     * Why MiniHUD cannot hold the finished shape [json] at its size, for the player; null when it
+     * can. Checked on the JSON itself, not the outline, because a shared MiniHUD shape carries
+     * sizes of its own that the outline never shows: a line showing a circle of radius 5 could ask
+     * MiniHUD for a sphere of radius 4,000, which would crash the game of whoever added it.
+     */
+    fun whyTooBig(json: JsonObject): String? {
+        val type = json.get("type")?.asString
+        val blocks = blocksOf(json)
+        return when {
+            json.entrySet().any { (_, value) -> !finite(value) } ->
+                "MiniHUD cannot take those sizes. It stays on this mod's map."
+            blocks != null && blocks > MAX_BLOCKS ->
+                "Too big for MiniHUD: it would draw about ${millions(blocks)} million blocks of it, and much over " +
+                    "${millions(MAX_BLOCKS)} million can crash the game. It stays on this mod's map."
+            type == "ellipsoid_spawn" && (number(json, "radius_z") ?: 0.0) > ELLIPSOID_MAX_RADIUS ->
+                "MiniHUD's ellipsoids are at most ${Shape.number(ELLIPSOID_MAX_RADIUS * 2)} blocks north to south, " +
+                    "and this one is ${Shape.number(number(json, "radius_z")!! * 2)}. It stays on this mod's map."
+            RADIUS_KEYS.any { key -> number(json, key)?.let { Math.ceil(it) + 1 >= MAX_RADIUS_LIMIT } == true } ||
+                LIMIT_KEYS.any { key -> number(json, key)?.let { it >= MAX_RADIUS_LIMIT } == true } ->
+                "MiniHUD's shapes are at most ${Shape.number(MAX_RADIUS_LIMIT - 2.0)} blocks from the middle to the edge. It stays on this mod's map."
+            else -> null
+        }
+    }
+
+    /** As [lagWarning] for a shape, but for the finished MiniHUD [json], shared sizes and all. */
+    fun lagWarning(json: JsonObject): String? {
+        val blocks = blocksOf(json) ?: return null
+        if (blocks < LAG_BLOCKS) return null
+        return "It is big: MiniHUD draws it block by block, about ${millions(blocks)} million blocks of it, " +
+            "which may slow the game while it is near."
+    }
+
+    /**
+     * About how many blocks MiniHUD draws for the finished shape [json], from its own sizes, by the
+     * same reckoning as [blocks] gives for an outline; null for a box (six flat sides) or a kind
+     * this cannot size.
+     */
+    fun blocksOf(json: JsonObject): Double? {
+        val type = json.get("type")?.asString ?: return null
+        if (json.has("corner1")) return null
+        if (json.has("origin_x")) {
+            // A cone's (or pyramid's) sloping side: the side of a cut cone from its base to its top.
+            val bottom = number(json, "bottom_radius") ?: 0.0
+            val top = number(json, "top_radius") ?: 0.0
+            val height = number(json, "height") ?: 1.0
+            return Math.PI * (bottom + top) * Math.sqrt((bottom - top) * (bottom - top) + height * height)
+        }
+        val r = number(json, "radius") ?: return null
+        return when (type) {
+            "ellipsoid_spawn" -> {
+                val b = minOf(number(json, "radius_y") ?: r, ELLIPSOID_MAX_RADIUS)
+                val c = minOf(number(json, "radius_z") ?: r, ELLIPSOID_MAX_RADIUS)
+                4 * Math.PI * (r * b + r * c + b * c) / 3
+            }
+            in SPHERES -> {
+                val outer = r + (number(json, "margin") ?: 0.0)
+                4 * Math.PI * outer * outer
+            }
+            // Prisms: their wall, as tall as they are high.
+            "square" -> (number(json, "height") ?: 1.0) * 8 * r
+            "rhombus" -> (number(json, "height") ?: 1.0) * 4 * Math.sqrt(2.0) * r
+            "circle" -> (number(json, "height") ?: 1.0) * 2 * Math.PI * r
+            else -> null
+        }
+    }
+
+    /** Sizes the finished JSON can ask MiniHUD for, measured from the middle; and the limits raised for them. */
+    private val RADIUS_KEYS = listOf("radius", "radius_y", "radius_z", "bottom_radius", "top_radius", "height")
+    private val LIMIT_KEYS = listOf("max_radius", "max_height")
+
+    private fun number(json: JsonObject, key: String): Double? =
+        json.get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asDouble
+
+    /** Whether every number in [value] is a real one, not NaN or infinity. */
+    private fun finite(value: JsonElement): Boolean = when {
+        value.isJsonArray -> value.asJsonArray.all(::finite)
+        value.isJsonPrimitive && value.asJsonPrimitive.isNumber -> value.asDouble.isFinite()
+        else -> true
+    }
+
     /** About how many blocks MiniHUD draws for [shape] as [form]; null for a box, drawn as six flat sides. */
-    private fun blocks(shape: Shape, form: Form?): Double? {
+    internal fun blocks(shape: Shape, form: Form?): Double? {
         val chosen = form?.takeIf { it in forms(shape.type) } ?: forms(shape.type).first()
         if (shape.type == Shape.Type.RECTANGLE) return null
         val r = shape.radius
@@ -475,7 +561,51 @@ internal object MiniHudGeometry {
     fun sizesText(sizes: JsonObject): String =
         sizes.entrySet().joinToString(" ") { (key, value) -> "$key=${text(value).replace(" ", "")}" }
 
-    /** Sizes read back from [words] as [sizesText] writes them; words of anything else are left out. */
+    /**
+     * The kinds of MiniHUD shape a shared line may ask for: those this mod knows how to make again.
+     * Anything else from chat is not passed on to MiniHUD at all.
+     */
+    private val SHAREABLE_TYPES: Set<String> = NEEDS.keys + "centered_box"
+
+    /** [type] when it is a kind of MiniHUD shape a shared line may ask for; null otherwise. */
+    fun shareableType(type: String?): String? = type?.takeIf { it in SHAREABLE_TYPES }
+
+    private val POSITION_KEYS = setOf("center", "corner1", "corner2", "origin_x", "origin_y", "origin_z")
+    private val SIZE_LIMITED_KEYS = setOf("radius", "radius_y", "radius_z", "bottom_radius", "top_radius", "height", "width", "depth", "margin", "max_radius", "max_height")
+    private val DIRECTIONS = setOf("UP", "DOWN", "NORTH", "SOUTH", "EAST", "WEST")
+    private val SNAPS = setOf("none", "center", "corner")
+
+    /**
+     * Only the shared sizes that are what MiniHUD expects: known keys, real numbers no bigger than
+     * a world (positions) or MiniHUD's own limit (sizes), and directions and snaps by their names.
+     * They come from other players' chat and end up in MiniHUD's own reader, so anything else is
+     * dropped rather than passed on. Null when nothing is left.
+     */
+    fun checkedSizes(sizes: JsonObject?): JsonObject? {
+        if (sizes == null) return null
+        fun numberIn(value: JsonElement, range: ClosedFloatingPointRange<Double>) =
+            value.isJsonPrimitive && value.asJsonPrimitive.isNumber && value.asDouble.isFinite() && value.asDouble in range
+        val world = -Shape.MAX_COORDINATE.toDouble()..Shape.MAX_COORDINATE.toDouble()
+        val size = 0.0..MAX_RADIUS_LIMIT.toDouble()
+        val out = JsonObject()
+        for ((key, value) in sizes.entrySet()) {
+            val ok = when (key) {
+                "center", "corner1", "corner2" -> value.isJsonArray && value.asJsonArray.size() == 3 && value.asJsonArray.all { numberIn(it, world) }
+                in POSITION_KEYS -> numberIn(value, world)
+                in SIZE_LIMITED_KEYS -> numberIn(value, size)
+                "main_axis", "direction" -> value.isJsonPrimitive && value.asJsonPrimitive.isString && value.asString.uppercase() in DIRECTIONS
+                "snap" -> value.isJsonPrimitive && value.asJsonPrimitive.isString && value.asString in SNAPS
+                else -> false
+            }
+            if (ok) out.add(key, value.deepCopy())
+        }
+        return out.takeIf { it.size() > 0 }
+    }
+
+    /**
+     * Sizes read back from [words] as [sizesText] writes them; words of anything else are left
+     * out, and so are values MiniHUD should not be given ([checkedSizes]).
+     */
     fun parseSizes(words: List<String>): JsonObject? {
         val out = JsonObject()
         for (word in words) {
@@ -491,7 +621,7 @@ internal object MiniHudGeometry {
                 else -> out.addProperty(key, value)
             }
         }
-        return out.takeIf { it.size() > 0 }
+        return checkedSizes(out)
     }
 
     /**

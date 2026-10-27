@@ -237,9 +237,16 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         val nameWidth = panelWidth / 2
         val radiusWidth = panelWidth / 6
         for (preset in presets) {
-            nameBoxes.add(field(left, y, nameWidth, preset.name, "unused", 32))
-            radiusBoxes.add(field(left + nameWidth + GAP, y, radiusWidth, preset.radius, "radius", 10)
-                .also { it.setTooltip(Tooltip.create(Component.literal("Radius in blocks."))) })
+            nameBoxes.add(field(left, y, nameWidth, preset.name, "unused", Config.MAX_PRESET_NAME))
+            radiusBoxes.add(field(left + nameWidth + GAP, y, radiusWidth, preset.radius, "radius", 10).also { box ->
+                box.setTooltip(Tooltip.create(Component.literal(
+                    "Radius in blocks, up to ${Shape.number(Shape.MAX_TYPED_SIZE)}. One shown in red is not kept.")))
+                // Red while it is not a radius a shape can have, so it is clear it will not be kept.
+                fun colour(text: String) = box.setTextColor(
+                    if (text.isBlank() || presetRadius(text) != null) TEXT_COLOUR else BAD_COLOUR)
+                colour(box.value)
+                box.setResponder(::colour)
+            })
             val colourLeft = left + nameWidth + radiusWidth + GAP * 2
             addRenderableWidget(
                 CycleButton.builder<Int>({ Component.literal(Colours.name(it)).withStyle { s -> s.withColor(it and 0xFFFFFF) } }, preset.colour)
@@ -313,8 +320,8 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         Config.beaconMinY = beaconMinY
         Config.beaconMaxY = beaconMaxY
         Config.presets = presets.mapNotNull { draft ->
-            val radius = draft.radius.trim().toDoubleOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null
-            if (draft.name.isBlank()) return@mapNotNull null
+            val radius = presetRadius(draft.radius) ?: return@mapNotNull null
+            if (draft.name.isBlank() || !Config.validPreset(draft.name.trim(), radius)) return@mapNotNull null
             Config.Preset(draft.name.trim(), radius, draft.colour)
         }
         Config.save()
@@ -339,6 +346,12 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
         const val ROW = 20
         const val GAP = 2
         private const val BEACON_STEP = 50f
+        private const val TEXT_COLOUR = 0xFFE0E0E0.toInt()
+        private const val BAD_COLOUR = 0xFFFF5555.toInt()
+
+        /** A typed preset radius, when it is one a preset may have; null otherwise. */
+        fun presetRadius(text: String): Double? =
+            text.trim().toDoubleOrNull()?.takeIf { Config.validPreset("", it) }
 
         /** An on/off button with a tooltip. */
         fun toggle(x: Int, y: Int, width: Int, name: String, value: Boolean, explanation: String, onChange: (Boolean) -> Unit): CycleButton<Boolean> =

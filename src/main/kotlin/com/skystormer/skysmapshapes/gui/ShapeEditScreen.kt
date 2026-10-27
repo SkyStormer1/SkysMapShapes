@@ -54,8 +54,20 @@ class ShapeEditScreen private constructor(
     private var anchor = from?.anchor ?: Shape.Anchor.CENTRE
     private var lineWidth: Float = from?.lineWidth ?: Config.DEFAULT_LINE_WIDTH
 
+    /**
+     * How many blocks MiniHUD would draw for a shared MiniHUD shape whose own sizes make it much
+     * bigger than the outline shown; null for any other. Those sizes are never shown in the line or
+     * on the map, so such a shape does not start out going into MiniHUD.
+     */
+    private val inflatedBlocks: Double? = template?.takeIf { existing == null && sharedMiniHudType != null && sharedSizes != null }?.let { shown ->
+        val real = MiniHudGeometry.forMiniHud(shown, sharedY ?: 0, sharedMiniHudType, null, sharedSizes)
+            ?.let(MiniHudGeometry::blocksOf) ?: return@let null
+        val outline = MiniHudGeometry.forMiniHud(shown, sharedY ?: 0, sharedMiniHudType, null, null)?.let(MiniHudGeometry::blocksOf)
+        real.takeIf { outline == null || it > outline * BIGGER_THAN_OUTLINE }
+    }
+
     /** A new shape can be made in MiniHUD instead, when MiniHUD is installed. */
-    private var inMiniHud = sharedMiniHudType != null && Config.showMiniHud && MiniHudShapes.canReach(dimension)
+    private var inMiniHud = sharedMiniHudType != null && inflatedBlocks == null && Config.showMiniHud && MiniHudShapes.canReach(dimension)
 
     /** How a shape made in MiniHUD stands up in the world; kept to the kinds the shape has. */
     private var form: MiniHudGeometry.Form? = null
@@ -69,14 +81,31 @@ class ShapeEditScreen private constructor(
         ?: Config.presets.firstOrNull()?.radius?.let(Shape::number) ?: "128"
     private var widthText = from?.takeIf { it.type.sized == Shape.Sized.WIDTH_LENGTH }?.width?.let(Shape::number) ?: "32"
     private var lengthText = from?.takeIf { it.type.sized == Shape.Sized.WIDTH_LENGTH }?.length?.let(Shape::number) ?: "32"
-    private var message: Component =
-        if (existing == null && template != null)
-            Component.literal(
-                "Shared with you, for the ${Dimensions.name(template.dimension)}. " +
-                    if (sharedMiniHudType != null && MiniHudShapes.installed) "It came from MiniHUD, so it can go in your world too."
-                    else "Add keeps it on your map."
-            )
-        else Component.empty()
+    private var message: Component = when {
+        existing != null || template == null -> Component.empty()
+        inflatedBlocks != null && MiniHudShapes.installed ->
+            Component.literal("Its MiniHUD sizes are larger than the shape shown: about ${MiniHudGeometry.aboutBlocks(inflatedBlocks)} blocks of it.")
+        else -> sharedMessage(template)
+    }
+
+    /** What is said about a shared shape: where it is for, and how big it is in MiniHUD when it is going there. */
+    private fun sharedMessage(shown: Shape): Component {
+        val where = "Shared with you, for the ${Dimensions.name(shown.dimension)}. "
+        if (sharedMiniHudType == null || !MiniHudShapes.installed) return Component.literal(where + "Add keeps it on your map.")
+        if (!inMiniHud) return Component.literal(where + "It came from MiniHUD, so it can go in your world too.")
+        val blocks = miniHudJson(shown)?.let(MiniHudGeometry::blocksOf)
+            ?: return Component.literal(where + "It came from MiniHUD, so it goes in your world too.")
+        return Component.literal(where + "In MiniHUD it is about ${MiniHudGeometry.aboutBlocks(blocks)} blocks.")
+    }
+
+    /**
+     * What MiniHUD would be asked to make for [shape]: with the shared sizes while the outline is
+     * still the one shared, as [save] makes it.
+     */
+    private fun miniHudJson(shape: Shape) = MiniHudGeometry.forMiniHud(
+        shape, sharedY ?: MapMenus.miniHudY(shape), sharedMiniHudType, form,
+        sharedSizes?.takeIf { from != null && sameOutline(shape, from) },
+    )
 
     private lateinit var labelBox: EditBox
     private lateinit var xBox: EditBox
@@ -203,7 +232,13 @@ class ShapeEditScreen private constructor(
                 CycleButton.builder<Boolean>({ Component.literal(if (it) "Make it in MiniHUD" else "Make it in Sky's Map Shapes") }, inMiniHud)
                     .withValues(listOf(false, true))
                     .displayOnlyValue()
-                    .create(left, y, whereWidth, ROW, Component.literal("Where")) { _, value -> keepEdits(); inMiniHud = value; rebuildWidgets() }
+                    .create(left, y, whereWidth, ROW, Component.literal("Where")) { _, value ->
+                        keepEdits()
+                        inMiniHud = value
+                        // A shared shape says how big it really is in MiniHUD whenever it is going there.
+                        if (sharedMiniHudType != null) readShape {}?.let { message = sharedMessage(it) }
+                        rebuildWidgets()
+                    }
                     .also {
                         it.active = reachable
                         it.setTooltip(Tooltip.create(Component.literal(
@@ -351,23 +386,16 @@ class ShapeEditScreen private constructor(
         if (existing != null && ShapeStore.byId(existing.id) == null) {
             return show("${existing.name} is not on your map any more.")
         }
-        val x = xText.toIntOrNull() ?: return show("Type a whole number for X.")
-        val z = zText.toIntOrNull() ?: return show("Type a whole number for Z.")
-        val shape = when (type.sized) {
-            Shape.Sized.RADIUS -> {
-                val radius = size(radiusText) ?: return show("Type a size in blocks, more than 0.")
-                Shape(label = label.trim(), dimension = dimension, type = type, x = x, z = z, radius = radius, colour = colour, fill = fill, lineWidth = lineWidth)
-            }
-            Shape.Sized.WIDTH_LENGTH -> {
-                val w = size(widthText) ?: return show("Type a width in blocks, more than 0.")
-                val l = size(lengthText) ?: return show("Type a length in blocks, more than 0.")
-                Shape(label = label.trim(), dimension = dimension, type = type, x = x, z = z, width = w, length = l, anchor = if (type == Shape.Type.RECTANGLE) anchor else Shape.Anchor.CENTRE, colour = colour, fill = fill, lineWidth = lineWidth)
-            }
-        }
+        val shape = readShape(::show) ?: return
+        // A place far past the world border would be thrown away, with the whole file, on the next join.
+        if (!shape.isValid()) return show("That size or place is beyond any world.")
         if (existing == null && inMiniHud) {
             MiniHudGeometry.whyTooBig(shape, form)?.let { return show(it.substringBefore(" It stays")) }
+            // As MiniHUD will really make it: a shared shape's own sizes can be far bigger than its outline.
+            val json = miniHudJson(shape)
+            json?.let(MiniHudGeometry::whyTooBig)?.let { return show(it.substringBefore(" It stays")) }
             // A shape big enough to slow the game is made on the second press, once that has been said.
-            val warning = MiniHudGeometry.lagWarning(shape, form)
+            val warning = json?.let(MiniHudGeometry::lagWarning) ?: MiniHudGeometry.lagWarning(shape, form)
             val asked = "$type $radiusText $widthText $lengthText $form"
             if (warning != null && lagWarned != asked) {
                 lagWarned = asked
@@ -382,6 +410,24 @@ class ShapeEditScreen private constructor(
             ShapeStore.put(if (existing != null) shape.copy(id = existing.id, visible = existing.visible, y = existing.y) else shape.copy(y = sharedY))
         }
         minecraft.gui.setScreen(parent)
+    }
+
+    /** The shape as typed into the fields, or null after telling [say] what is wrong with them. */
+    private fun readShape(say: (String) -> Unit): Shape? {
+        fun wrong(text: String): Shape? { say(text); return null }
+        val x = xText.toIntOrNull() ?: return wrong("Type a whole number for X.")
+        val z = zText.toIntOrNull() ?: return wrong("Type a whole number for Z.")
+        return when (type.sized) {
+            Shape.Sized.RADIUS -> {
+                val radius = size(radiusText) ?: return wrong("Type a size in blocks, more than 0.")
+                Shape(label = label.trim(), dimension = dimension, type = type, x = x, z = z, radius = radius, colour = colour, fill = fill, lineWidth = lineWidth)
+            }
+            Shape.Sized.WIDTH_LENGTH -> {
+                val w = size(widthText) ?: return wrong("Type a width in blocks, more than 0.")
+                val l = size(lengthText) ?: return wrong("Type a length in blocks, more than 0.")
+                Shape(label = label.trim(), dimension = dimension, type = type, x = x, z = z, width = w, length = l, anchor = if (type == Shape.Type.RECTANGLE) anchor else Shape.Anchor.CENTRE, colour = colour, fill = fill, lineWidth = lineWidth)
+            }
+        }
     }
 
     private fun sameOutline(a: Shape, b: Shape) = a.type == b.type && a.x == b.x && a.z == b.z && a.radius == b.radius &&
@@ -428,5 +474,8 @@ class ShapeEditScreen private constructor(
         private const val GAP = 2
         private const val LABEL = 72
         private const val MAX_SIZE = Shape.MAX_TYPED_SIZE
+
+        /** How many times its outline's size a shared MiniHUD shape may be before it starts out of MiniHUD. */
+        private const val BIGGER_THAN_OUTLINE = 1.5
     }
 }

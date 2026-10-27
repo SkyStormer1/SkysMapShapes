@@ -43,7 +43,8 @@ object ShapesClient : ClientModInitializer {
 
         // A shape shared in chat becomes a message with an add button; everything else is untouched.
         ClientReceiveMessageEvents.ALLOW_CHAT.register { message, _, _, _, _ -> ShapeShare.onChat(message.string) }
-        ClientReceiveMessageEvents.ALLOW_GAME.register { message, _ -> ShapeShare.onChat(message.string) }
+        // Action-bar text comes through here too ([overlay]); a shape there is not turned into a chat line.
+        ClientReceiveMessageEvents.ALLOW_GAME.register { message, overlay -> overlay || ShapeShare.onChat(message.string) }
 
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             dispatcher.register(

@@ -29,7 +29,15 @@ Written from a full read of all 73 files on 2026-10-27. Nothing here has been bu
 - [x] Phase 0: baseline build
   - 2026-10-27: `./gradlew build` passed in 40 s; 61 tests, 0 failures (MiniHud 15, Shape 10,
     Share 14, SpawnOutlines 8, Untrusted 4, Volume 10).
-- [ ] Phase 1: chat share security and save bugs
+- [x] Phase 1: chat share security and save bugs
+  - 2026-10-27: build passes, 68 tests (ShareTest 17, UntrustedTest 8). Not checked in game yet.
+  - Left for 5.1: `AddShapeWindow.commit` (not a phase 1 file) still warns about lag from the
+    outline only. It is safe, because `MiniHudShapes.create` now refuses a too-big finished JSON for
+    every caller. It just does not give the "press again" warning for big-but-legal shared sizes.
+  - `centered_box` is accepted as a shared MiniHUD type as well as the `NEEDS` types and `SPHERES`,
+    since sharing already round-trips it (`aMiniHudShapeCarriesItsOwnSizes`).
+  - Found while testing: three `UntrustedTest` lines were `Map shape: circle ...` with no name.
+    They never parsed, so they passed without testing anything. They now have a name.
 - [ ] Phase 2: per-frame speed
 - [ ] Phase 3: background work (MiniHUD triggers, beacons, Hide all)
 - [ ] Phase 4: spawn proofing setup help and the render layer bypass

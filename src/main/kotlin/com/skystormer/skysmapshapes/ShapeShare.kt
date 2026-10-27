@@ -15,8 +15,12 @@ import net.minecraft.network.chat.HoverEvent
  * `Map shape AFK spot: circle r128 at 250 -96 (Nether) · orange · filled`. Players without this
  * mod see just that; anyone with it sees an [Add to my map] button beside it, which opens the shape
  * for them to look at before keeping it. The coded form only lives in that button's command and
- * never goes into chat. (1.2.0 and earlier put a coded string on the end of the line, which read as
- * random letters to everyone; those old lines are still understood.)
+ * never goes into chat. (1.2.0 and earlier put a coded string on the end of the line instead; those
+ * lines are no longer read, since their code skipped the checks a readable line goes through.)
+ *
+ * Everything in a shared line comes from someone else, so it is checked before it is used: sizes
+ * no bigger than the add screens take, only MiniHUD kinds and sizes this mod knows how to make
+ * ([MiniHudGeometry.checkedSizes]), and private shares only to names a player can really have.
  *
  * The line carries the shape's own dimension, so it always lands on the right map: a Nether shape
  * shared while the other player is in the Overworld is added to their Nether map, at the Nether
@@ -28,9 +32,6 @@ object ShapeShare {
 
     /** Where a shared line starts. */
     private const val START = "Map shape "
-
-    /** How 1.2.0 and earlier marked a shared line: a code followed it. */
-    private const val TAG = "SMS1:"
 
     /** Between the readable parts of a shared line. */
     private const val SEP = " · "
@@ -175,7 +176,9 @@ object ShapeShare {
                 }
                 part.startsWith("MiniHUD ") -> {
                     val words = part.removePrefix("MiniHUD ").split(' ')
-                    miniHudType = words.firstOrNull()?.takeIf { it.isNotBlank() }
+                    // A kind this mod does not know is not passed on to MiniHUD: the shape is
+                    // still offered for the map, without its MiniHUD part.
+                    miniHudType = MiniHudGeometry.shareableType(words.firstOrNull()) ?: continue
                     if (words.size >= 3 && words[1] == "y") y = words[2].toIntOrNull()
                     sizes = MiniHudGeometry.parseSizes(words.drop(1))
                 }
@@ -200,7 +203,7 @@ object ShapeShare {
             lineWidth = lineWidth,
             y = y,
         )
-        if (!shape.isValid()) return null
+        if (!shape.isValid() || !typedSize(shape)) return null
         // What to show beside the button: the line up to its dimension, without the extras.
         val shown = text.substring(0, text.length - extras.length).trimEnd()
         return shown to Shared(shape, miniHudType, y, sizes)
@@ -237,11 +240,15 @@ object ShapeShare {
         if (code.length > MAX_LINE) throw IllegalArgumentException("too long")
         val json = JsonParser.parseString(String(decoder.decode(code.trim()), Charsets.UTF_8)).asJsonObject
         val type = Shape.Type.valueOf(json.get("t").asString.uppercase())
+        // The same checks as a line of chat: a server can send a click that runs the command
+        // with any code it likes, without a readable line ever being shown.
+        val miniHudType = MiniHudGeometry.shareableType(json.get("m")?.asString)
         val y = json.get("y")?.asInt
         Shared(
-            miniHudType = json.get("m")?.asString,
+            miniHudType = miniHudType,
             y = y,
-            miniHudSizes = json.get("h")?.takeIf { it.isJsonObject }?.asJsonObject,
+            miniHudSizes = if (miniHudType == null) null
+                else MiniHudGeometry.checkedSizes(json.get("h")?.takeIf { it.isJsonObject }?.asJsonObject),
             shape = Shape(
                 label = json.get("l")?.asString ?: "",
                 dimension = json.get("d").asString,
@@ -257,17 +264,18 @@ object ShapeShare {
                 lineWidth = json.get("n")?.asFloat?.coerceIn(Config.MIN_LINE_WIDTH, Config.MAX_LINE_WIDTH) ?: Config.DEFAULT_LINE_WIDTH,
                 y = y,
             ),
-        ).takeIf { it.shape.isValid() }
+        ).takeIf { it.shape.isValid() && typedSize(it.shape) }
     } catch (e: Exception) {
         null
     }
 
-    /** The code on the end of a line from 1.2.0 or earlier, or null when there is none. */
-    fun codeIn(text: String): String? {
-        val start = text.indexOf(TAG)
-        if (start < 0) return null
-        return text.substring(start + TAG.length).trim().takeWhile { !it.isWhitespace() }.takeIf { it.isNotEmpty() }
-    }
+    /**
+     * Whether a shared shape is no bigger than one typed into the add screens. [Shape.isValid]
+     * allows more, for shapes saved in files, but a shared one between the two opened in the add
+     * screen and then could not be saved from it.
+     */
+    private fun typedSize(shape: Shape): Boolean =
+        shape.radius <= Shape.MAX_TYPED_SIZE && shape.width <= Shape.MAX_TYPED_SIZE && shape.length <= Shape.MAX_TYPED_SIZE
 
     /** Sends [shape] to everyone as one line of chat. Only called from the Share screen, by a click. */
     fun share(shape: MapShape): Boolean {
@@ -296,11 +304,7 @@ object ShapeShare {
         // The message put in its place reads as a shared shape too, so without this it would be
         // read, replaced, read again, and so on until the game gave up.
         if (showing || !Config.enabled || !Config.shareInChat) return true
-        val (said, shared) = readLine(text) ?: run {
-            // A line from 1.2.0 or earlier, with the code on the end: shown without it.
-            val old = codeIn(text)?.let(::decode) ?: return true
-            text.substringBefore(TAG).trim().removeSuffix("\u00b7").trim() to old
-        }
+        val (said, shared) = readLine(text) ?: return true
         val shape = shared.shape
         showing = true
         try {
@@ -349,9 +353,31 @@ object ShapeShare {
     fun shareWith(shape: MapShape, players: List<String>): Boolean {
         if (Minecraft.getInstance().connection == null) return false
         val line = message(shape).takeIf { it.isNotEmpty() } ?: return false
-        for (player in players) waiting.addLast(player to line)
-        return true
+        return queue(line, players) > 0
     }
+
+    /**
+     * Queues [line] for each of [players] whose name a player can really have, and says how many.
+     * The names come from the server's player list, which a server or plugin can fill with
+     * anything: a "player" called `@a` would turn `/tell @a` into a message to everyone.
+     */
+    internal fun queue(line: String, players: List<String>): Int {
+        var queued = 0
+        for (player in players) {
+            if (!isPlayerName(player)) continue
+            waiting.addLast(player to line)
+            queued++
+        }
+        return queued
+    }
+
+    /** How many private messages are still to send. */
+    internal val waitingCount: Int get() = waiting.size
+
+    /** Whether [name] is one a player can have: Mojang's rule, 1 to 16 letters, digits and underscores. */
+    fun isPlayerName(name: String): Boolean = PLAYER_NAME.matches(name)
+
+    private val PLAYER_NAME = Regex("[A-Za-z0-9_]{1,16}")
 
     private var ticks = 0
 
