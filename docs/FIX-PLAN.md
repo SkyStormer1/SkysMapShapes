@@ -26,7 +26,9 @@ Written from a full read of all 73 files on 2026-10-27. Nothing here has been bu
 
 ## Progress
 
-- [ ] Phase 0: baseline build
+- [x] Phase 0: baseline build
+  - 2026-10-27: `./gradlew build` passed in 40 s; 61 tests, 0 failures (MiniHud 15, Shape 10,
+    Share 14, SpawnOutlines 8, Untrusted 4, Volume 10).
 - [ ] Phase 1: chat share security and save bugs
 - [ ] Phase 2: per-frame speed
 - [ ] Phase 3: background work (MiniHUD triggers, beacons, Hide all)
