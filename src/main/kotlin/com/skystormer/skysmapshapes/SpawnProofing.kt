@@ -1,6 +1,8 @@
 package com.skystormer.skysmapshapes
 
 import it.unimi.dsi.fastutil.longs.LongArrayList
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet
+import it.unimi.dsi.fastutil.longs.LongSet
 import java.lang.reflect.Method
 import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.client.Minecraft
@@ -78,6 +80,13 @@ object SpawnProofing {
     @Volatile
     private var shownSpots: LongArray? = null
 
+    /**
+     * The sections [shownSpots] fall in ([SpotSections]), so Litematica's whole-box layer checks can
+     * be answered in a few lookups. Replaced, never changed, so the builder threads can read it.
+     */
+    @Volatile
+    private var shownSections: LongSet? = null
+
     private var shownState: BlockState? = null
 
     /** The block in use, kept while you hold something else so the schematic does not flicker. */
@@ -146,7 +155,7 @@ object SpawnProofing {
     }
 
     /** The shapes in [dimension] set to spawn-proof, as MiniHUD's light levels count them. */
-    private fun volumes(dimension: String): List<Volume> {
+    fun volumes(dimension: String): List<Volume> {
         return Volumes.inDimension(dimension) { ShapeStore.spawnProof(it) }.map { it.second }
     }
 
@@ -198,6 +207,40 @@ object SpawnProofing {
      */
     @JvmStatic
     fun coversLitematicaOverlay(pos: BlockPos): Boolean = holds(shownSpots ?: return false, pos.asLong())
+
+    /** [coversLitematicaOverlay] for a block given as x, y, z. */
+    @JvmStatic
+    fun coversLitematicaOverlay(x: Int, y: Int, z: Int): Boolean = holds(shownSpots ?: return false, BlockPos.asLong(x, y, z))
+
+    /**
+     * Called by the render layer bypass hooks, on Litematica's chunk builder threads too: whether
+     * the box from the min corner to the max one (both included) holds one of the spots. Litematica
+     * then builds, shows or walks that box whatever your render layers say, and only the spots in
+     * it are let through ([coversLitematicaOverlay]); everything else still follows your layers.
+     */
+    @JvmStatic
+    fun litematicaBoxHasSpot(minX: Int, minY: Int, minZ: Int, maxX: Int, maxY: Int, maxZ: Int): Boolean =
+        SpotSections.anyIn(shownSections ?: return false, minX, minY, minZ, maxX, maxY, maxZ)
+
+    /**
+     * Whether a render layer bypass hook has let one of the spots through. Until then, render layers
+     * that leave spots out are something [SpawnProofSetup] has to ask you to change.
+     */
+    @Volatile
+    var layerBypassWorking = false
+        private set
+
+    private val bypassesLogged = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /** Called by a render layer bypass hook each time it lets a spot through that your layers leave out. */
+    @JvmStatic
+    fun layerBypassUsed(what: String) {
+        layerBypassWorking = true
+        if (bypassesLogged.add(what)) Log.info("Render layer bypass working: {}", what)
+    }
+
+    /** The spots the placement holds now, sorted; null when there is none. */
+    fun shown(): LongArray? = shownSpots
 
     /** Whether the sorted [spots] hold [packed]. */
     private fun holds(spots: LongArray, packed: Long): Boolean = java.util.Arrays.binarySearch(spots, packed) >= 0
@@ -333,9 +376,15 @@ object SpawnProofing {
         }
         if (state == shownState && spots.contentEquals(shownSpots)) return
         try {
-            LitematicaPlacement.show(spots, state)
+            // Known before Litematica draws them, so its builder threads see the new spots.
+            val sections = SpotSections.of(spots)
+            val newSections = sections != shownSections
             shownSpots = spots
+            shownSections = sections
             shownState = state
+            LitematicaPlacement.show(spots, state)
+            // Litematica only works out again which chunks to draw when asked; with X or Z layers it matters.
+            if (newSections) LitematicaPlacement.recheckVisibleChunks()
             outlineStale = true
         } catch (e: Throwable) {
             broken = true
@@ -410,6 +459,7 @@ object SpawnProofing {
     fun clear() {
         if (shownSpots == null) return
         shownSpots = null
+        shownSections = null
         shownState = null
         outlineStale = true
         try {
@@ -567,4 +617,47 @@ object SpawnProofBlocks {
         }
         return state
     }
+}
+
+/**
+ * The 16-block sections a set of spots falls in, as packed keys, so "does this box hold a spot?"
+ * takes one lookup per section rather than a pass over every spot. Litematica asks that about
+ * whole chunks while it decides what to build, on its builder threads.
+ */
+object SpotSections {
+
+    /** The sections [spots] (packed block positions) fall in. */
+    fun of(spots: LongArray): LongOpenHashSet {
+        val out = LongOpenHashSet()
+        for (spot in spots) out.add(key(BlockPos.getX(spot) shr 4, BlockPos.getY(spot) shr 4, BlockPos.getZ(spot) shr 4))
+        return out
+    }
+
+    /** Whether any of [sections] lies at least partly inside the box from min to max, in blocks, both included. */
+    fun anyIn(sections: LongSet, minX: Int, minY: Int, minZ: Int, maxX: Int, maxY: Int, maxZ: Int): Boolean {
+        if (sections.isEmpty() || maxX < minX || maxY < minY || maxZ < minZ) return false
+        val x0 = minX shr 4; val y0 = minY shr 4; val z0 = minZ shr 4
+        val x1 = maxX shr 4; val y1 = maxY shr 4; val z1 = maxZ shr 4
+        val count = (x1 - x0 + 1).toLong() * (y1 - y0 + 1) * (z1 - z0 + 1)
+        if (count > sections.size) {
+            // A big box and few sections: go through the sections instead.
+            val each = sections.iterator()
+            while (each.hasNext()) {
+                val key = each.nextLong()
+                val x = xOf(key); val y = yOf(key); val z = zOf(key)
+                if (x in x0..x1 && y in y0..y1 && z in z0..z1) return true
+            }
+            return false
+        }
+        for (x in x0..x1) for (z in z0..z1) for (y in y0..y1) if (sections.contains(key(x, y, z))) return true
+        return false
+    }
+
+    /** x in the top 22 bits, z in the next 22, y in the low 20: every section of a world fits. */
+    fun key(x: Int, y: Int, z: Int): Long =
+        ((x.toLong() and 0x3FFFFF) shl 42) or ((z.toLong() and 0x3FFFFF) shl 20) or (y.toLong() and 0xFFFFF)
+
+    private fun xOf(key: Long): Int = (key shr 42).toInt()
+    private fun zOf(key: Long): Int = ((key shl 22) shr 42).toInt()
+    private fun yOf(key: Long): Int = ((key shl 44) shr 44).toInt()
 }

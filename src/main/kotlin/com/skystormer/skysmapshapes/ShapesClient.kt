@@ -46,14 +46,25 @@ object ShapesClient : ClientModInitializer {
         // Action-bar text comes through here too ([overlay]); a shape there is not turned into a chat line.
         ClientReceiveMessageEvents.ALLOW_GAME.register { message, overlay -> overlay || ShapeShare.onChat(message.string) }
 
+        // `fix <check>` is spawn proofing's [Fix it]; any other word is a shared shape's code. Brigadier
+        // tries a matching literal before the argument, and no code is ever the word "fix".
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             dispatcher.register(
-                ClientCommands.literal(ShapeShare.COMMAND).then(
-                    ClientCommands.argument("code", StringArgumentType.word()).executes { context ->
-                        ShapeShare.accept(StringArgumentType.getString(context, "code"))
-                        1
-                    }
-                )
+                ClientCommands.literal(ShapeShare.COMMAND)
+                    .then(
+                        ClientCommands.literal(SpawnProofSetup.FIX).then(
+                            ClientCommands.argument("check", StringArgumentType.word()).executes { context ->
+                                SpawnProofSetup.fixFromCommand(StringArgumentType.getString(context, "check"))
+                                1
+                            }
+                        )
+                    )
+                    .then(
+                        ClientCommands.argument("code", StringArgumentType.word()).executes { context ->
+                            ShapeShare.accept(StringArgumentType.getString(context, "code"))
+                            1
+                        }
+                    )
             )
         }
 
@@ -66,6 +77,7 @@ object ShapesClient : ClientModInitializer {
                 ShapeShare.clear()
                 ShapeHover.clear()
                 SpawnProofing.reset()
+                SpawnProofSetup.reset()
             }
         }
 
@@ -115,6 +127,7 @@ object ShapesClient : ClientModInitializer {
             MiniHudShapes.tick(client)
             LightLevels.tick()
             SpawnProofing.tick()
+            SpawnProofSetup.tick()
             BeaconBeams.tick()
             ShapeShare.tick()
             // Hover only means anything while the world map is open.

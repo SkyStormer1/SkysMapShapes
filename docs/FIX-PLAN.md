@@ -54,7 +54,18 @@ Written from a full read of all 73 files on 2026-10-27. Nothing here has been bu
   - 3.4: reach is `size / zoom + 16`, kept between 256 and 4096 blocks. Not checked that `size` is in pixels
     and `zoom` pixels per block in Xaero's minimap: look at a shape at the minimap's edge in cave mode.
   - Beacons: also a 30-second full re-scan as a safety net (chunks sent again would otherwise go unseen).
-- [ ] Phase 4: spawn proofing setup help and the render layer bypass
+- [x] Phase 4: spawn proofing setup help and the render layer bypass
+  - 2026-10-27: build passes, 77 tests, 0 failures (5 new in SpotSectionsTest). Not checked in game yet:
+    the redirects are `require = 0`, so only the log can show they apply (look for
+    "Render layer bypass working: ..." lines with layers set to a single layer away from the spots).
+    `devmods/` was empty and there is no 26.3 MiniHUD jar here, so `runClientGameTest` could not run.
+  - The bypass covers every layer check in 4.1's findings, so the Layers check only fails when no
+    bypass hook has run yet and a shown spot is outside the layers.
+  - Chat: after switching on, MiniHUD's rendering and light level overlay are not named again when
+    they go off, since the overlay hotkey is how spawn proofing is meant to be switched off. Every
+    other check is said again as the plan says. "Switched on" means spawn proofing on with
+    Everywhere or a spawn-proofed shape in your dimension. Quiet for 5 s after joining.
+  - MiniHUD's light level range counts as tiny under 8 blocks (no fix, says where to change it).
 - [ ] Phase 5: duplicated and stale code
 - [ ] Phase 6: defaults, version, notes
 
@@ -391,6 +402,43 @@ the jar is in Gradle's cache). Find, and write down in this file under "4.1 find
      if they filter by layer.
 3. For each, the exact method, descriptor and whether it is called with a `BlockPos` or x/y/z, so
    a `@Redirect` or `@WrapOperation` can target it.
+
+#### 4.1 findings (Litematica 0.29.1 `ZqV316KY`, MaLiLib 0.30.2 `JX9bESec`, read with `javap -c`)
+
+1. The range is MaLiLib's `fi.dy.masa.malilib.util.position.LayerRange`, from
+   `DataManager.getRenderLayerRange()`. `isPositionWithinRange(BlockPos)`, `(long)`, `(III)`;
+   `intersectsBox(IIIIII)`; `getClampedRenderBoundingBox(IntBoundingBox)`; `setLayerMode(LayerMode)`.
+   Modes in `fi.dy.masa.malilib.util.LayerMode`: ALL, SINGLE_LAYER, LAYER_RANGE, ALL_BELOW, ALL_ABOVE.
+2. Callers that matter for a placement's blocks and Easy Place:
+   - `ChunkRendererSchematicVbo.rebuildChunk(ChunkRenderTaskSchematic, ChunkRenderDispatcherBuffers)V`:
+     - `intersectsBox(IIIIII)Z` on the render chunk's whole column box: false skips building it (**box check**);
+     - `getClampedRenderBoundingBox(IntBoundingBox)` on each placement box in the chunk: only the
+       clamped part is walked, block by block, into `renderBlocksAndOverlay` (**box check**).
+   - `SchematicPlacementManager.getAndUpdateVisibleChunks(ChunkPos)`: `intersectsBox(IIIIII)Z` on each
+     loaded schematic chunk column, full world height; false leaves the column out of the chunks drawn
+     (**box check**; only ever false for X or Z axis layers). Recomputed after
+     `setVisibleSubChunksNeedsUpdate()`.
+   - `EasyPlaceUtils.placementRestrictionInEffect()Z` and `placementRestrictionInEffect(Minecraft)Z`:
+     `isPositionWithinRange(BlockPos)Z`; outside the range, placing there is refused (**single position**).
+   - `RayTraceUtils.traceFirstStep` / `traceLoopSteps` (private static): `isPositionWithinRange(III)Z`
+     on `RayTraceCalcsData.x/y/z`, only when tracing with the layer range respected (the schematic
+     world traces Easy Place uses through `getGenericTrace` and
+     `getFurthestSchematicWorldTraceBeforeVanilla`) (**single position**).
+   - `RayTraceUtils.getFurthestSchematicWorldBlockBeforeVanilla` and `getPickBlockLastTrace`:
+     `isPositionWithinRange(BlockPos)Z` (**single position**).
+   - Not relevant here: entity and block entity drawing (`WorldRendererSchematic.prepareEntities` /
+     `prepareBlockEntities`), pasting (`SchematicPlacingUtils.shouldPasteBlock`, the paste and
+     delete tasks), the verifier, face culling at the range's edge (`isPositionAtRenderEdgeOnSide`).
+   - The schematic world itself is filled without looking at the range (`SchematicPlacingUtils`
+     only checks it when pasting), so the blocks are always there to be found.
+3. Descriptors are in the mixins that hook them: `ChunkRendererSchematicVboMixin`, `SchematicPlacementManagerMixin`,
+   `EasyPlaceUtilsMixin` and `RayTraceUtilsMixin` (all `@Redirect`, `require = 0`).
+
+**Decision.** Every check can be bypassed: the single-position ones by "is one of the spots"; the
+three box checks by "the box holds a spot" (`SpawnProofing.litematicaBoxHasSpot`, from a set of
+packed section keys built with `shownSpots`). Where the clamped box is widened, the blocks outside
+the range that are not spots are left out again one by one, so other placements still follow the
+layers.
 
 **Decision point.** If every check can be bypassed for single positions:
 go to 4.2. If a check works on whole sections (skips building a section outside the range),

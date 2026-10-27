@@ -5,7 +5,9 @@
   "compatibilityLevel": "JAVA_${java_version}",
   "client": [
     "ChunkRendererSchematicVboMixin",
-    "EasyPlaceUtilsMixin"
+    "EasyPlaceUtilsMixin",
+    "RayTraceUtilsMixin",
+    "SchematicPlacementManagerMixin"
   ],
   "injectors": {
     "defaultRequire": 0

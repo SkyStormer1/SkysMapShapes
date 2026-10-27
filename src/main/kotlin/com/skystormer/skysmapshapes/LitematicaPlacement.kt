@@ -8,6 +8,7 @@ import fi.dy.masa.litematica.schematic.placement.SchematicPlacement
 import fi.dy.masa.litematica.selection.AreaSelection
 import fi.dy.masa.litematica.selection.Box
 import fi.dy.masa.litematica.world.SchematicWorldHandler
+import fi.dy.masa.malilib.util.LayerMode
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet
 import net.minecraft.client.Minecraft
 import net.minecraft.core.BlockPos
@@ -141,6 +142,29 @@ internal object LitematicaPlacement {
 
     /** Whether Litematica's Easy Place is on. */
     fun easyPlaceOn(): Boolean = Configs.Generic.EASY_PLACE_MODE.booleanValue
+
+    fun turnOnEasyPlace() = Configs.Generic.EASY_PLACE_MODE.setBooleanValue(true)
+
+    /** Whether Litematica draws at all: its main rendering switch and its schematic rendering switch. */
+    fun renderingOn(): Boolean = Configs.Visuals.ENABLE_RENDERING.booleanValue && Configs.Visuals.ENABLE_SCHEMATIC_RENDERING.booleanValue
+
+    fun turnOnRendering() {
+        Configs.Visuals.ENABLE_RENDERING.setBooleanValue(true)
+        Configs.Visuals.ENABLE_SCHEMATIC_RENDERING.setBooleanValue(true)
+    }
+
+    /** Whether Litematica's render layers take in the block at [packed] (a packed block position). */
+    fun inLayers(packed: Long): Boolean = DataManager.getRenderLayerRange().isPositionWithinRange(packed)
+
+    /** Sets Litematica's render layers to All. */
+    fun showAllLayers() = DataManager.getRenderLayerRange().setLayerMode(LayerMode.ALL)
+
+    /**
+     * Asks Litematica to work out again which chunks it draws. It leaves out whole chunks that miss
+     * your render layers (with X or Z layers), and only looks again when asked; the bypass lets
+     * chunks with spots in, but Litematica has to look for it to count.
+     */
+    fun recheckVisibleChunks() = DataManager.getSchematicPlacementManager().setVisibleSubChunksNeedsUpdate()
 
     fun clear() {
         val old = placement ?: return

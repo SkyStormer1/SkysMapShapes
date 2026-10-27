@@ -3,6 +3,7 @@ package com.skystormer.skysmapshapes.gui
 import com.skystormer.skysmapshapes.Colours
 import com.skystormer.skysmapshapes.Config
 import com.skystormer.skysmapshapes.MiniHudShapes
+import com.skystormer.skysmapshapes.SpawnProofSetup
 import com.skystormer.skysmapshapes.SpawnProofing
 import com.skystormer.skysmapshapes.gui.ConfigScreen.Companion.GAP
 import com.skystormer.skysmapshapes.gui.ConfigScreen.Companion.ROW
@@ -12,6 +13,7 @@ import com.skystormer.skysmapshapes.gui.ConfigScreen.Companion.toggle
 import com.skystormer.skysmapshapes.gui.ConfigScreen.Slider
 import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.components.CycleButton
+import net.minecraft.client.gui.components.StringWidget
 import net.minecraft.client.gui.components.Tooltip
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.network.chat.Component
@@ -54,6 +56,8 @@ class LightLevelsScreen(private val parent: Screen?) : FramedScreen(Component.li
         val left = width / 2 - panelWidth / 2
         val third = (panelWidth - GAP * 2) / 3
         var y = top
+
+        if (SpawnProofing.installed) y = setup(left, y)
 
         if (MiniHudShapes.installed) {
             addRenderableWidget(toggle(left, y, panelWidth, "MiniHUD light levels only in shapes", lightInsideShapes,
@@ -123,6 +127,46 @@ class LightLevelsScreen(private val parent: Screen?) : FramedScreen(Component.li
         }
     }
 
+    /**
+     * The Setup lines, from [top]: one per [SpawnProofSetup.Check], ✔ or ✘ (? when it cannot tell),
+     * its reason as a tooltip and a Fix button where it has a fix; then Fix all. Looked at again when
+     * the screen opens and after each fix. Returns where the next row goes.
+     */
+    private fun setup(left: Int, top: Int): Int {
+        var y = top
+        for (check in SpawnProofSetup.Check.entries) {
+            val passes = SpawnProofSetup.passes(check)
+            val (mark, colour) = when (passes) {
+                true -> "✔" to PASS
+                false -> "✘" to FAIL
+                null -> "?" to UNKNOWN
+            }
+            val tip = check.why + when (passes) {
+                true -> ""
+                false -> "\n\nNow: " + SpawnProofSetup.problem(check) + "." + (SpawnProofSetup.advice(check)?.let { " $it" } ?: "")
+                null -> "\n\nCannot tell with this version of MiniHUD or Litematica."
+            }
+            val text = Component.literal("$mark ").withStyle { it.withColor(colour) }.append(Component.literal(SpawnProofSetup.line(check)))
+            addRenderableWidget(StringWidget(left, y + (ROW - font.lineHeight) / 2, text, font).also { it.setTooltip(Tooltip.create(Component.literal(tip))) })
+            if (passes == false && SpawnProofSetup.canFix(check)) {
+                addRenderableWidget(Button.builder(Component.literal("Fix")) {
+                    SpawnProofSetup.fix(check)
+                    rebuildWidgets()
+                }.bounds(left + panelWidth - FIX_WIDTH, y, FIX_WIDTH, ROW).tooltip(Tooltip.create(Component.literal(check.why))).build())
+            }
+            y += ROW + SETUP_GAP
+        }
+        val fixable = SpawnProofSetup.fixable()
+        addRenderableWidget(Button.builder(Component.literal("Fix all")) {
+            SpawnProofSetup.fixable().forEach { SpawnProofSetup.fix(it) }
+            rebuildWidgets()
+        }.bounds(left, y, panelWidth, ROW)
+            .tooltip(Tooltip.create(Component.literal(
+                "Applies every fix above: switches on what spawn proofing needs in MiniHUD and Litematica. Nothing there changes except when you click."
+            ))).build().also { it.active = fixable.isNotEmpty() })
+        return y + ROW + GAP
+    }
+
     private fun save() {
         val proofingChanged = Config.spawnProofing != spawnProofing || Config.spawnProofEverywhere != spawnProofEverywhere ||
             Config.spawnProofRange != spawnProofRange || Config.spawnProofRenderThrough != spawnProofRenderThrough ||
@@ -149,6 +193,12 @@ class LightLevelsScreen(private val parent: Screen?) : FramedScreen(Component.li
     }
 
     private companion object {
+        private const val FIX_WIDTH = 50
+        private const val SETUP_GAP = 2
+        private const val PASS = 0x55FF55
+        private const val FAIL = 0xFF5555
+        private const val UNKNOWN = 0xAAAAAA
+
         /** Spawn proofing's distance in blocks, for the slider's value. */
         fun rangeOf(slider: Double): Int =
             lerp(slider, Config.MIN_SPAWN_PROOF_RANGE.toFloat(), Config.MAX_SPAWN_PROOF_RANGE.toFloat(), 1f).roundToInt()
