@@ -58,8 +58,8 @@ object MiniHudShapes {
     /** How many ticks the other dimensions stay read after the shapes list last asked for them. */
     private const val ASKED_FOR_TICKS = 40
 
-    private var ticks = 0
-    private var broken = false
+    private val safetyNet = Every(SAFETY_NET_EVERY)
+    private val guard = Guard("MiniHUD's shapes are not shown")
 
     /** Set by [markDirty]: the next tick reads MiniHUD. Volatile, as MiniHUD may call it from another thread. */
     @Volatile
@@ -180,7 +180,7 @@ object MiniHudShapes {
      * dimension or the shapes list asks for them.
      */
     fun tick(minecraft: Minecraft, force: Boolean = false) {
-        if (!installed || broken || !Config.enabled || !Config.showMiniHud) {
+        if (!installed || guard.broken || !Config.enabled || !Config.showMiniHud) {
             if (all.isNotEmpty()) all = emptyList()
             return
         }
@@ -197,12 +197,11 @@ object MiniHudShapes {
         val mapMoved = wantOthers && mapDimension != lastMapDimension
         lastMapDimension = if (wantOthers) mapDimension else null
         if (wantOthers != othersLoaded || mapMoved) dirty = true
-        ticks = (ticks + 1) % SAFETY_NET_EVERY
-        if (ticks == 0) dirty = true
+        if (safetyNet.due()) dirty = true
         if (!dirty && !force) return
         dirty = false
-        val api = api ?: run { broken = true; return }
-        try {
+        val api = api ?: run { guard.stop(); return }
+        guard.run("read MiniHUD's shapes", Unit) {
             val live = ArrayList<MiniHudShape>()
             for (shape in api.getAllShapes.invoke(api.manager) as List<*>) {
                 // One odd shape is skipped and said once; it does not stop the rest being read.
@@ -216,11 +215,8 @@ object MiniHudShapes {
             }
             othersLoaded = wantOthers
             all = if (wantOthers) live + otherDimensions(api, here) else live
-        } catch (e: Throwable) {
-            broken = true
-            all = emptyList()
-            Log.error("Could not read MiniHUD's shapes; they will not be shown until the game restarts", e)
         }
+        if (guard.broken) all = emptyList()
     }
 
     /**
@@ -249,7 +245,7 @@ object MiniHudShapes {
     fun clear() {
         all = emptyList()
         fileCache.clear()
-        ticks = 0
+        safetyNet.restart()
         dirty = true
         lastDimension = null
         lastMapDimension = null
@@ -407,6 +403,38 @@ object MiniHudShapes {
             "MiniHUD would not take that shape; the log says why."
         }
     }
+
+    /** What came of [tryCreate]. */
+    sealed interface CreateResult {
+        /** It is in MiniHUD now. */
+        object Made : CreateResult
+
+        /** It was not made, and [why] says so in a line for the screen. */
+        class Refused(val why: String) : CreateResult
+
+        /** Big enough to slow the game: say [warning], and make it only when asked again. */
+        class WarnFirst(val warning: String) : CreateResult
+    }
+
+    /**
+     * The add window's and the full edit screen's "make it in MiniHUD": checked as typed and as
+     * MiniHUD will really make it (shared [sizes] can make it far bigger than its outline), then a
+     * shape big enough to slow the game is only warned about unless [warned] says that was already
+     * done, then [create]. The screens keep their own "press again" state.
+     */
+    internal fun tryCreate(shape: Shape, y: Int, form: MiniHudGeometry.Form?, typeId: String?, sizes: JsonObject?, warned: Boolean): CreateResult {
+        val asForm = typeId?.let { MiniHudGeometry.formOfType(it) } ?: form
+        MiniHudGeometry.whyTooBig(shape, asForm)?.let { return CreateResult.Refused(shortened(it)) }
+        val json = MiniHudGeometry.forMiniHud(shape, y, typeId, form, sizes)
+        json?.let(MiniHudGeometry::whyTooBig)?.let { return CreateResult.Refused(shortened(it)) }
+        val warning = json?.let(MiniHudGeometry::lagWarning) ?: MiniHudGeometry.lagWarning(shape, form)
+        if (warning != null && !warned) return CreateResult.WarnFirst(warning)
+        create(shape, y, typeId, form, sizes)?.let { return CreateResult.Refused(shortened(it)) }
+        return CreateResult.Made
+    }
+
+    /** A refusal without its "it stays on this mod's map" ending, which does not hold in a screen still open. */
+    private fun shortened(why: String): String = why.substringBefore(" It stays").substringBefore(", so it stays")
 
     /** Whether shapes can be made in MiniHUD for [dimension]: live where you are, else through its file. */
     fun canReach(dimension: String): Boolean =
