@@ -1,6 +1,7 @@
 package com.skystormer.skysmapshapes
 
 import com.google.gson.JsonParser
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -111,5 +112,20 @@ class VolumeTest {
         assertTrue(column.contains(5, -60, 0))
         assertTrue(column.contains(5, 300, 0))
         assertFalse(column.contains(6, 64, 0))
+    }
+
+    @Test
+    fun aDirectionReadsTheSameInEitherCase() {
+        fun cone(direction: String) = volume(
+            """{"type":"cone","origin_x":0,"origin_y":64,"origin_z":0,"bottom_radius":4,"top_radius":0,"height":6,"direction":"$direction"}"""
+        )
+        fun prism(axis: String) = volume("""{"type":"square","center":[0.5,64,0.5],"main_axis":"$axis","radius":2.0,"height":5}""")
+        for ((small, big) in listOf(cone("north") to cone("NORTH"), prism("west") to prism("WEST"))) {
+            for (x in -8..8) for (y in 56..72) for (z in -8..8) assertEquals(big.contains(x, y, z), small.contains(x, y, z))
+        }
+        // North runs to smaller z: the cone's tip side, and nothing behind its base.
+        val north = cone("north")
+        assertTrue(north.contains(0, 64, -5))
+        assertFalse(north.contains(0, 64, 2))
     }
 }
