@@ -33,8 +33,9 @@ object BeaconBeams {
     @Volatile
     private var beams: List<Beam> = emptyList()
 
-    private var ticks = 0
-    private var broken = false
+    private val refresh = Every(REFRESH_TICKS, dueFirst = true)
+    private val safetyNet = Every(SAFETY_NET_TICKS)
+    private val guard = Guard("beacon beams are off")
 
     /** The level everything below was read from; a different one (another dimension) starts it all again. */
     private var scannedLevel: Level? = null
@@ -61,7 +62,7 @@ object BeaconBeams {
 
     /** Finds the beacons around you and what blocks each one, a little each tick. Main thread. */
     fun tick() {
-        if (broken) return
+        if (guard.broken) return
         val minecraft = Minecraft.getInstance()
         val level = minecraft.level
         val player = minecraft.player
@@ -69,7 +70,7 @@ object BeaconBeams {
             if (scannedLevel != null || beams.isNotEmpty()) forgetAll()
             return
         }
-        try {
+        guard.run("find the beacons around you", Unit) {
             if (level !== scannedLevel) {
                 forgetAll()
                 scannedLevel = level
@@ -82,24 +83,20 @@ object BeaconBeams {
                 rebuild = true
             }
             val here = player.blockPosition()
-            if (ticks % REFRESH_TICKS == 0) {
+            if (refresh.due()) {
                 plan(level, here, minOf(Config.beaconDistance, minecraft.options.effectiveRenderDistance))
                 rebuild = true
             }
             // Anything that changed without a block update being seen (a chunk sent again, say) is caught here.
-            if (ticks % SAFETY_NET_TICKS == SAFETY_NET_TICKS - 1) {
+            if (safetyNet.due()) {
                 rescan.addAll(chunkBeacons.keys)
                 pending.addAll(chunkBeacons.keys)
                 made.clear()
             }
-            ticks++
             scanSome(level)
             if (rebuild) rebuildBeams(level, here)
-        } catch (e: Throwable) {
-            broken = true
-            forgetAll()
-            Log.error("Could not find the beacons around you; beacon beams are off until the game restarts", e)
         }
+        if (guard.broken) forgetAll()
     }
 
     private fun forgetAll() {
@@ -256,10 +253,10 @@ object BeaconBeams {
 
     /** Draws the beams and outlines; called as each frame is gathered. */
     fun draw() {
-        if (broken) return
+        if (guard.broken) return
         val all = beams
         if (all.isEmpty()) return
-        try {
+        guard.run("draw beacon beams", Unit) {
             val beam = GizmoStyle.fill(BEAM_COLOUR)
             val blocked = GizmoStyle.fill(BLOCKER_FILL)
             val onTop = Config.beaconThroughWalls
@@ -284,9 +281,6 @@ object BeaconBeams {
                     outline(x1, y1 - GROW, z1, x2, y2 + 1 + GROW, z2, onTop)
                 }
             }
-        } catch (e: Throwable) {
-            broken = true
-            Log.error("Could not draw beacon beams; they are off until the game restarts", e)
         }
     }
 

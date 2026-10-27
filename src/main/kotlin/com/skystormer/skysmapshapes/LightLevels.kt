@@ -41,13 +41,13 @@ object LightLevels {
     val active: Boolean
         get() = Config.enabled && Config.lightInsideShapes && Config.showMiniHud && MiniHudShapes.installed
 
-    private var broken = false
+    private val guard = Guard("light levels show as MiniHUD has them")
     private var hookSeen = false
     private var needsUpdate: Pair<Any, Method>? = null
 
     /** What the shapes looked like at the last [tick], to notice a change that MiniHUD would not. */
     private var lastState = 0
-    private var ticks = 0
+    private val check = Every(CHECK_EVERY)
 
     /**
      * Takes the spots outside the shapes out of [overlay]'s list, when [active]. Says whether it
@@ -55,12 +55,12 @@ object LightLevels {
      */
     @JvmStatic
     fun filter(overlay: Any): Boolean {
-        if (broken || !active) return false
+        if (guard.broken || !active) return false
         if (!hookSeen) {
             hookSeen = true
             Log.info("Keeping MiniHUD's light levels to inside shapes")
         }
-        return try {
+        return guard.run("keep MiniHUD's light levels to inside shapes", false) {
             val spots = MiniHudLight.spots(overlay)
             if (spots.isEmpty()) return true
             val (lit, dark) = volumes(Dimensions.ofPlayer() ?: return false)
@@ -72,10 +72,6 @@ object LightLevels {
                 dark.any { it.contains(x, y, z) } || lit.none { it.contains(x, y, z) }
             }
             true
-        } catch (e: Throwable) {
-            broken = true
-            Log.error("Could not keep MiniHUD's light levels to inside shapes; they show as MiniHUD has them until the game restarts", e)
-            false
         }
     }
 
@@ -102,9 +98,8 @@ object LightLevels {
      * added, changed, shown or hidden, or the setting switched, would otherwise not show until then.
      */
     fun tick() {
-        if (broken || !MiniHudShapes.installed) return
-        ticks = (ticks + 1) % CHECK_EVERY
-        if (ticks != 0) return
+        if (guard.broken || !MiniHudShapes.installed) return
+        if (!check.due()) return
         val state = state()
         if (state != lastState) {
             lastState = state
@@ -126,16 +121,13 @@ object LightLevels {
 
     /** Asks MiniHUD to gather its light level spots again, so a change shows straight away. */
     fun refresh() {
-        if (broken || !MiniHudShapes.installed) return
-        try {
+        if (!MiniHudShapes.installed) return
+        guard.run("ask MiniHUD to redraw its light levels", Unit) {
             val (overlay, method) = needsUpdate ?: run {
                 val overlayClass = Class.forName(OVERLAY)
                 (overlayClass.getField("INSTANCE").get(null) to overlayClass.getMethod("setNeedsUpdate")).also { needsUpdate = it }
             }
             method.invoke(overlay)
-        } catch (e: Throwable) {
-            broken = true
-            Log.error("Could not ask MiniHUD to redraw its light levels", e)
         }
     }
 

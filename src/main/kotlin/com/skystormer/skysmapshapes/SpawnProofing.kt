@@ -92,9 +92,9 @@ object SpawnProofing {
     /** The block in use, kept while you hold something else so the schematic does not flicker. */
     private var current: Block? = null
 
-    private var broken = false
+    private val guard = Guard("spawn proofing is off")
     private var seen = false
-    private var ticks = 0
+    private val updates = Every(CHECK_EVERY)
     private var wasOn = false
 
     private var overlayOn: Pair<Any, Method>? = null
@@ -106,8 +106,8 @@ object SpawnProofing {
      */
     @JvmStatic
     fun gather(overlay: Any) {
-        if (broken || !active) return
-        try {
+        if (guard.broken || !active) return
+        guard.run("read MiniHUD's light levels for spawn proofing", Unit) {
             val minecraft = Minecraft.getInstance()
             val level = minecraft.level ?: return
             val player = minecraft.player ?: return
@@ -148,9 +148,6 @@ object SpawnProofing {
                 seen = true
                 Log.info("Spawn proofing: {} spot(s) to cover", out.size)
             }
-        } catch (e: Throwable) {
-            broken = true
-            Log.error("Could not read MiniHUD's light levels for spawn proofing; it is off until the game restarts", e)
         }
     }
 
@@ -161,9 +158,8 @@ object SpawnProofing {
 
     /** Called every client tick: brings the placement up to date with the spots and the block. */
     fun tick() {
-        if (broken || !installed) return
-        ticks = (ticks + 1) % CHECK_EVERY
-        if (ticks == 0) update()
+        if (guard.broken || !installed) return
+        if (updates.due()) update()
         val wanted = Config.spawnProofRenderThrough
         if (wanted != outlineWanted) {
             outlineWanted = wanted
@@ -264,7 +260,7 @@ object SpawnProofing {
 
     /** Draws spawn proofing's part of Litematica again, after a setting changed how it is drawn. */
     fun redrawLitematica() {
-        if (!installed || broken) return
+        if (!installed || guard.broken) return
         try {
             LitematicaPlacement.redraw()
         } catch (e: Throwable) {
@@ -318,11 +314,11 @@ object SpawnProofing {
      * drawing; Litematica's settings and other placements are left alone.
      */
     fun drawOutlines() {
-        if (broken) return
+        if (guard.broken) return
         val rects = fill
         val edges = outline
         if (rects.isEmpty() && edges.isEmpty()) return
-        try {
+        guard.run("draw spawn proofing's outlines", Unit) {
             val rgb = Config.spawnProofColour and 0xFFFFFF
             if (rects.isNotEmpty()) {
                 val style = GizmoStyle.fill(((Config.spawnProofOpacity * 255).roundToInt().coerceIn(0, 255) shl 24) or rgb)
@@ -344,19 +340,12 @@ object SpawnProofing {
                 Gizmos.line(Vec3(edge.x1.toDouble(), y, edge.z1.toDouble()), Vec3(edge.x2.toDouble(), y, edge.z2.toDouble()), outlineColour, OUTLINE_WIDTH)
                     .setAlwaysOnTop()
             }
-        } catch (e: Throwable) {
-            broken = true
-            Log.error("Could not draw spawn proofing's outlines; spawn proofing is off until the game restarts", e)
         }
     }
 
     private fun update() {
-        val on = try {
+        val on = guard.run("tell whether MiniHUD's light levels are on", false) {
             active && Minecraft.getInstance().player != null && overlayShowing()
-        } catch (e: Throwable) {
-            broken = true
-            Log.error("Could not tell whether MiniHUD's light levels are on; spawn proofing is off until the game restarts", e)
-            false
         }
         if (!on) {
             wasOn = false
@@ -375,7 +364,7 @@ object SpawnProofing {
             return
         }
         if (state == shownState && spots.contentEquals(shownSpots)) return
-        try {
+        guard.run("make Litematica's spawn proofing placement", Unit) {
             // Known before Litematica draws them, so its builder threads see the new spots.
             val sections = SpotSections.of(spots)
             val newSections = sections != shownSections
@@ -386,11 +375,8 @@ object SpawnProofing {
             // Litematica only works out again which chunks to draw when asked; with X or Z layers it matters.
             if (newSections) LitematicaPlacement.recheckVisibleChunks()
             outlineStale = true
-        } catch (e: Throwable) {
-            broken = true
-            Log.error("Could not make Litematica's spawn proofing placement; spawn proofing is off until the game restarts", e)
-            clear()
         }
+        if (guard.broken) clear()
     }
 
     /**
@@ -400,7 +386,7 @@ object SpawnProofing {
      * of your inventory. Anything else in your hand (a tool, food) is left alone.
      */
     fun beforeUse(minecraft: Minecraft) {
-        if (broken) return
+        if (guard.broken) return
         val state = shownState ?: return
         val spots = shownSpots ?: return
         if (!minecraft.options.keyUse.isDown || minecraft.gui.screen() != null) return
@@ -413,7 +399,7 @@ object SpawnProofing {
         val heldBlock = (held.item as? BlockItem)?.block
         if (!held.isEmpty && heldBlock == null) return
         if (heldBlock != null && heldBlock in SpawnProofBlocks.accepted()) return
-        try {
+        guard.run("swap to a spawn proofing block", Unit) {
             if (!LitematicaPlacement.easyPlaceOn()) return
             if (!lookingAtSpot(minecraft, spots)) return
             swapCooldown = SWAP_COOLDOWN
@@ -423,15 +409,12 @@ object SpawnProofing {
                 !stack.isEmpty && (stack.item as? BlockItem)?.block?.let(wanted) == true
             }
             // The block the placement shows; else any accepted one, and the placement follows it next tick.
-            val slot = slotOf { it == state.block } ?: slotOf { it in SpawnProofBlocks.accepted() }?.also { ticks = CHECK_EVERY - 1 }
+            val slot = slotOf { it == state.block } ?: slotOf { it in SpawnProofBlocks.accepted() }?.also { updates.soon() }
             when {
                 slot == null -> player.sendOverlayMessage(Component.literal("No accepted blocks to spawn-proof with"))
                 Inventory.isHotbarSlot(slot) -> inventory.setSelectedSlot(slot)
                 else -> minecraft.gameMode?.handleContainerInput(player.inventoryMenu.containerId, slot, inventory.selectedSlot, ContainerInput.SWAP, player)
             }
-        } catch (e: Throwable) {
-            broken = true
-            Log.error("Could not swap to a spawn proofing block; spawn proofing is off until the game restarts", e)
         }
     }
 
