@@ -61,24 +61,24 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
 
     override fun resetToDefaults() {
         keepEdits()
-        enabled = true
-        showPanel = true
-        showOnWorldMap = true
-        showOnMinimap = true
-        showLabels = true
-        showMiniHud = true
-        hideInMiniHud = true
-        miniHudIncludeDisabled = false
-        thicknessScale = 1f
-        fillOpacity = 0.15f
-        beaconBeams = false
-        beaconOutlines = false
-        beaconLimit = Config.MAX_BEACON_LIMIT
-        beaconDistance = Config.MAX_BEACON_DISTANCE
-        hideGameBeams = false
-        beaconThroughWalls = true
-        beaconMinY = Config.LOWEST_Y
-        beaconMaxY = Config.HIGHEST_Y
+        enabled = Config.default(Config::enabled)
+        showPanel = Config.default(Config::showPanel)
+        showOnWorldMap = Config.default(Config::showOnWorldMap)
+        showOnMinimap = Config.default(Config::showOnMinimap)
+        showLabels = Config.default(Config::showLabels)
+        showMiniHud = Config.default(Config::showMiniHud)
+        hideInMiniHud = Config.default(Config::hideInMiniHud)
+        miniHudIncludeDisabled = Config.default(Config::miniHudIncludeDisabled)
+        thicknessScale = Config.default(Config::thicknessScale)
+        fillOpacity = Config.default(Config::fillOpacity)
+        beaconBeams = Config.default(Config::beaconBeams)
+        beaconOutlines = Config.default(Config::beaconOutlines)
+        beaconLimit = Config.default(Config::beaconLimit)
+        beaconDistance = Config.default(Config::beaconDistance)
+        hideGameBeams = Config.default(Config::hideGameBeams)
+        beaconThroughWalls = Config.default(Config::beaconThroughWalls)
+        beaconMinY = Config.default(Config::beaconMinY)
+        beaconMaxY = Config.default(Config::beaconMaxY)
     }
 
     override fun content(top: Int) {

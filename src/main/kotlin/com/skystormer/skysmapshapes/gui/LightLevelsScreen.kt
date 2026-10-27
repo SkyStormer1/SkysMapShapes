@@ -40,16 +40,16 @@ class LightLevelsScreen(private val parent: Screen?) : FramedScreen(Component.li
     override val resetTip = "Puts the light level and spawn proofing settings back to how the mod comes. Your accepted blocks are kept."
 
     override fun resetToDefaults() {
-        lightInsideShapes = false
-        netherBiomeSpawns = true
-        spawnProofing = true
-        spawnProofEverywhere = false
-        spawnProofRange = Config.MAX_SPAWN_PROOF_RANGE
-        spawnProofRenderThrough = true
-        spawnProofColour = Colours.AQUA.argb
-        spawnProofGhostBlocks = true
-        spawnProofOpacity = 0.25f
-        spawnProofHeight = 2
+        lightInsideShapes = Config.default(Config::lightInsideShapes)
+        netherBiomeSpawns = Config.default(Config::netherBiomeSpawns)
+        spawnProofing = Config.default(Config::spawnProofing)
+        spawnProofEverywhere = Config.default(Config::spawnProofEverywhere)
+        spawnProofRange = Config.default(Config::spawnProofRange)
+        spawnProofRenderThrough = Config.default(Config::spawnProofRenderThrough)
+        spawnProofColour = Config.default(Config::spawnProofColour)
+        spawnProofGhostBlocks = Config.default(Config::spawnProofGhostBlocks)
+        spawnProofOpacity = Config.default(Config::spawnProofOpacity)
+        spawnProofHeight = Config.default(Config::spawnProofHeight)
     }
 
     override fun content(top: Int) {
