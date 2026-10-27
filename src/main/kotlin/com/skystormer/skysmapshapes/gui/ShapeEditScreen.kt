@@ -390,20 +390,19 @@ class ShapeEditScreen private constructor(
         // A place far past the world border would be thrown away, with the whole file, on the next join.
         if (!shape.isValid()) return show("That size or place is beyond any world.")
         if (existing == null && inMiniHud) {
-            MiniHudGeometry.whyTooBig(shape, form)?.let { return show(it.substringBefore(" It stays")) }
-            // As MiniHUD will really make it: a shared shape's own sizes can be far bigger than its outline.
-            val json = miniHudJson(shape)
-            json?.let(MiniHudGeometry::whyTooBig)?.let { return show(it.substringBefore(" It stays")) }
             // A shape big enough to slow the game is made on the second press, once that has been said.
-            val warning = json?.let(MiniHudGeometry::lagWarning) ?: MiniHudGeometry.lagWarning(shape, form)
             val asked = "$type $radiusText $widthText $lengthText $form"
-            if (warning != null && lagWarned != asked) {
-                lagWarned = asked
-                return show("$warning Press Save again to make it anyway.")
-            }
             // The shared sizes hold only while the outline is still the one shared.
             val sizes = sharedSizes?.takeIf { from != null && sameOutline(shape, from) }
-            MiniHudShapes.create(shape, sharedY ?: MapMenus.miniHudY(shape), sharedMiniHudType, form, sizes)?.let { return show(it.substringBefore(", so it stays")) }
+            val y = sharedY ?: MapMenus.miniHudY(shape)
+            when (val result = MiniHudShapes.tryCreate(shape, y, form, sharedMiniHudType, sizes, warned = lagWarned == asked)) {
+                is MiniHudShapes.CreateResult.Refused -> return show(result.why)
+                is MiniHudShapes.CreateResult.WarnFirst -> {
+                    lagWarned = asked
+                    return show("${result.warning} Press Save again to make it anyway.")
+                }
+                MiniHudShapes.CreateResult.Made -> {}
+            }
             MapMenus.say("Made ${shape.name} in MiniHUD" + (form?.let { " as a " + MiniHudGeometry.formName(type, it).lowercase() } ?: "") +
                 if (Dimensions.ofPlayer() == dimension) "" else ", there when you next go to the ${Dimensions.name(dimension)}")
         } else {

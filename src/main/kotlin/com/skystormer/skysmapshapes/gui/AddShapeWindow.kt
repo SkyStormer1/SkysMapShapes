@@ -803,14 +803,15 @@ object AddShapeWindow {
         if (existing == null && inMiniHud) {
             val made = shape.copy(id = UUID.randomUUID().toString())
             val form = chosenForm()
-            MiniHudGeometry.whyTooBig(made, form)?.let { return show(it.substringBefore(" It stays")) }
-            val warning = MiniHudGeometry.lagWarning(made, form)
             val asked = "$type ${made.radius} ${made.width} ${made.length} $form"
-            if (warning != null && lagWarned != asked) {
-                lagWarned = asked
-                return show("$warning Press Create again to make it anyway.")
+            when (val result = MiniHudShapes.tryCreate(made, y ?: MapMenus.miniHudY(made), form, null, null, warned = lagWarned == asked)) {
+                is MiniHudShapes.CreateResult.Refused -> return show(result.why)
+                is MiniHudShapes.CreateResult.WarnFirst -> {
+                    lagWarned = asked
+                    return show("${result.warning} Press Create again to make it anyway.")
+                }
+                MiniHudShapes.CreateResult.Made -> {}
             }
-            MiniHudShapes.create(made, y ?: MapMenus.miniHudY(made), null, form)?.let { return show(it.substringBefore(", so it stays")) }
             Log.info("Made {} in MiniHUD from the map", made.name)
         } else if (existing != null) {
             ShapeStore.put(shape.copy(id = existing.id, visible = existing.visible))
