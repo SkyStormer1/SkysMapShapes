@@ -89,14 +89,17 @@ class ShareScreen(private val parent: Screen?, private val shape: MapShape) :
         refreshRows()
     }
 
-    /** Everyone else on the server, matching the search. */
+    /**
+     * Everyone else on the server, matching the search. Names no player can have are left out:
+     * the list comes from the server, and an entry such as `@a` would send the shape to everyone.
+     */
     private fun players(): List<String> {
         val connection = minecraft.connection ?: return emptyList()
         val me = minecraft.player?.gameProfile?.name
         val words = query.trim().lowercase()
         return connection.onlinePlayers
             .map { it.profile.name }
-            .filter { it != me && it.isNotBlank() }
+            .filter { it != me && ShapeShare.isPlayerName(it) }
             .filter { words.isEmpty() || it.lowercase().contains(words) }
             .sorted()
     }

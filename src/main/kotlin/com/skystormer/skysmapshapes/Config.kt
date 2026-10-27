@@ -182,6 +182,18 @@ object Config {
         Preset("No despawn", 32.0, Colours.GREEN.argb),
     )
 
+    /**
+     * Whether a preset can make a shape that can be kept: a real radius no bigger than the add
+     * screens take, and a name that fits its box. Any other one is skipped.
+     */
+    fun validPreset(name: String, radius: Double): Boolean =
+        radius.isFinite() && radius > 0 && radius <= Shape.MAX_TYPED_SIZE && name.length <= MAX_PRESET_NAME
+
+    /** What a private share command may be: `tell`, `msg`, `w`, `minecraft:tell`, a plugin's `pm`. */
+    private val SHARE_COMMAND = Regex("[a-z0-9_:-]{1,32}")
+    private var warnedShareCommand = false
+
+    const val MAX_PRESET_NAME = 32
     const val MIN_BEACON_LIMIT = 50
     const val MAX_BEACON_LIMIT = 1000
     const val MIN_BEACON_DISTANCE = 1
@@ -228,8 +240,15 @@ object Config {
             spawnProofHeight = (json.get("spawnProofHeight")?.asInt ?: spawnProofHeight).coerceIn(MIN_SPAWN_PROOF_HEIGHT, MAX_SPAWN_PROOF_HEIGHT)
             spawnProofBlocks = json.getAsJsonArray("spawnProofBlocks")?.map { it.asString }?.toSet() ?: spawnProofBlocks
             shareInChat = json.get("shareInChat")?.asBoolean ?: shareInChat
-            privateShareCommand = json.get("privateShareCommand")?.asString?.trim()?.removePrefix("/")
-                ?.takeIf { it.isNotEmpty() } ?: privateShareCommand
+            json.get("privateShareCommand")?.asString?.trim()?.removePrefix("/")?.takeIf { it.isNotEmpty() }?.let { command ->
+                // It is put in front of every private share, so only a plain command name will do.
+                if (SHARE_COMMAND.matches(command)) privateShareCommand = command
+                else {
+                    privateShareCommand = "tell"
+                    if (!warnedShareCommand) Log.warn("privateShareCommand '{}' is not a plain command name; using tell", command)
+                    warnedShareCommand = true
+                }
+            }
             showPanel = json.get("showPanel")?.asBoolean ?: showPanel
             panelOpen = json.get("panelOpen")?.asBoolean ?: panelOpen
             panelRight = json.get("panelRight")?.asInt ?: panelRight
@@ -259,9 +278,10 @@ object Config {
             beaconMaxY = (json.get("beaconMaxY")?.asInt ?: beaconMaxY).coerceIn(beaconMinY, HIGHEST_Y)
             json.getAsJsonArray("presets")?.let { array ->
                 presets = array.mapNotNull { element ->
-                    val preset = element.asJsonObject
+                    val preset = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
                     val name = preset.get("name")?.asString ?: return@mapNotNull null
                     val radius = preset.get("radius")?.asDouble ?: return@mapNotNull null
+                    if (!validPreset(name, radius)) return@mapNotNull null
                     Preset(name, radius, Colours.parse(preset.get("colour")?.asString) ?: Colours.RED.argb)
                 }.take(MAX_PRESETS)
             }

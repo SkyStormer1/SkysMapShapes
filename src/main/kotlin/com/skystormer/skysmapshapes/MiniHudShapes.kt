@@ -238,6 +238,9 @@ object MiniHudShapes {
         return try {
             // A shared MiniHUD shape is made again as the kind it was, at the sizes it had.
             val json = MiniHudGeometry.forMiniHud(shape, y, typeId, form, sizes) ?: return "MiniHUD has no shape like that."
+            // Checked again as it will really be made: shared sizes can make it far bigger than its
+            // outline, and MiniHUD crashes the game on a shape too big rather than refusing it.
+            MiniHudGeometry.whyTooBig(json)?.let { return it }
             val kind = json.get("type").asString
             val typeClass = Class.forName("fi.dy.masa.minihud.renderer.shapes.ShapeType")
             val type = typeClass.getMethod("fromString", String::class.java).invoke(null, kind)

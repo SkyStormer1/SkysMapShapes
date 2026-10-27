@@ -144,14 +144,6 @@ class ShareTest {
         assertEquals(shape().radius, back.shape.radius)
     }
 
-    @Test
-    fun linesFromOlderVersionsAreStillUnderstood() {
-        val code = ShapeShare.encode(ShapeShare.Shared(shape(), null, null))
-        val old = "<Steve> Map shape: AFK spot · Circle, radius 128 · Nether · SMS1:$code"
-        assertNull(ShapeShare.readLine(old))
-        assertNotNull(ShapeShare.decode(ShapeShare.codeIn(old)!!))
-    }
-
     /**
      * The message shown in place of a shared line reads as a shared shape itself, so the chat
      * hook has to stop there rather than replacing its own message for ever (it crashed the game).
@@ -179,8 +171,64 @@ class ShareTest {
     @Test
     fun ordinaryChatIsLeftAlone() {
         assertNull(ShapeShare.readLine("hey, look at the map shape by the gold farm"))
-        assertNull(ShapeShare.codeIn("hey, look at the map shape by the gold farm"))
         assertTrue(ShapeShare.onChat("hey, look at the map shape by the gold farm"))
         assertNull(ShapeShare.decode("not-a-code"))
+    }
+
+    /**
+     * A shared line's MiniHUD sizes are never shown, so a small circle could ask MiniHUD for a
+     * sphere big enough to crash the game of whoever adds it. The outline alone looks fine; the
+     * shape MiniHUD would really be asked for is what gets refused.
+     */
+    @Test
+    fun hiddenMiniHudSizesBiggerThanTheOutlineAreRefused() {
+        val line = "<Steve> Map shape Trap: circle r5 at 0 0 (Overworld) · red · MiniHUD sphere_blocky y 64 radius=4000 max_radius=4002"
+        val got = ShapeShare.readLine(line)!!.second
+        assertNull(MiniHudGeometry.whyTooBig(got.shape))
+        val json = MiniHudGeometry.forMiniHud(got.shape, got.y!!, got.miniHudType, null, got.miniHudSizes)!!
+        assertNotNull(MiniHudGeometry.whyTooBig(json))
+        // The same through the add button's code.
+        val back = ShapeShare.decode(ShapeShare.encode(got))!!
+        assertNotNull(MiniHudGeometry.whyTooBig(MiniHudGeometry.forMiniHud(back.shape, back.y!!, back.miniHudType, null, back.miniHudSizes)!!))
+    }
+
+    @Test
+    fun sharedSizesWithinMiniHudsLimitsStillGoThrough() {
+        val line = "Map shape Farm: circle r40 at 0 0 (Overworld) · red · MiniHUD despawn_sphere y 64 center=0.5,64,0.5 radius=40"
+        val got = ShapeShare.readLine(line)!!.second
+        val json = MiniHudGeometry.forMiniHud(got.shape, got.y!!, got.miniHudType, null, got.miniHudSizes)!!
+        assertNull(MiniHudGeometry.whyTooBig(json))
+        assertNull(MiniHudGeometry.lagWarning(json))
+        // Big but legal: warned about, not refused.
+        val big = JsonParser.parseString("""{"type":"sphere_blocky","center":[0,64,0],"radius":250,"max_radius":251}""").asJsonObject
+        assertNull(MiniHudGeometry.whyTooBig(big))
+        assertNotNull(MiniHudGeometry.lagWarning(big))
+    }
+
+    /** The finished JSON is counted the same way as the outline it was made from, so both checks agree. */
+    @Test
+    fun blocksCountedFromTheJsonMatchTheOutline() {
+        for (type in Shape.Type.entries) for (form in MiniHudGeometry.forms(type)) {
+            val shape = Shape(label = "", dimension = "minecraft:overworld", type = type, x = 0, z = 0,
+                radius = 100.0, width = 80.0, length = 60.0, colour = Colours.RED.argb)
+            val fromShape = MiniHudGeometry.blocks(shape, form)
+            val fromJson = MiniHudGeometry.blocksOf(MiniHudGeometry.toMiniHudJson(shape, 64, form)!!)
+            if (fromShape == null) assertNull(fromJson, "$type $form")
+            else assertEquals(fromShape, fromJson!!, fromShape * 0.01, "$type $form")
+        }
+    }
+
+    /** A server can list a "player" called @a; a private share to it would go to everyone. */
+    @Test
+    fun privateSharesOnlyGoToRealPlayerNames() {
+        ShapeShare.clear()
+        try {
+            assertEquals(0, ShapeShare.queue("line", listOf("@a", "a b", "x;y", "abcdefghijklmnopq", "")))
+            assertEquals(0, ShapeShare.waitingCount)
+            assertEquals(2, ShapeShare.queue("line", listOf("Steve", "Sky_Stormer", "@p")))
+            assertEquals(2, ShapeShare.waitingCount)
+        } finally {
+            ShapeShare.clear()
+        }
     }
 }
