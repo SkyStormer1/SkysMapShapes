@@ -143,7 +143,7 @@ object SpawnProofSetup {
 
     // Telling you in chat.
 
-    private var ticks = 0
+    private val looks = Every(LOOK_EVERY)
     private var quiet = QUIET_TICKS
     private var wasWanted = false
     private var sayOnSwitchOn = false
@@ -166,8 +166,7 @@ object SpawnProofSetup {
     fun tick() {
         if (!SpawnProofing.installed) return
         if (quiet > 0) quiet--
-        ticks = (ticks + 1) % LOOK_EVERY
-        if (ticks != 0) return
+        if (!looks.due()) return
         val wanted = wanted()
         if (wanted && !wasWanted && quiet == 0) sayOnSwitchOn = true
         wasWanted = wanted

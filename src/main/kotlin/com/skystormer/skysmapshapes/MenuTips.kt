@@ -37,16 +37,13 @@ object MenuTips {
     }
 
     fun draw(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, menu: GuiRightClickMenu?) {
-        if (menu == null || broken) return
-        try {
+        if (menu == null) return
+        guard.run("put hover text on Xaero's right-click menu", Unit) {
             val options = optionsOf(menu) ?: return
             val line = hoveredLine(menu, mouseX, mouseY) ?: return
             val tip = (options.getOrNull(line) as? TipOption)?.tip ?: return
             // Wrapped and kept on screen, which vanilla's tooltip is not at a big GUI scale.
             DockPanel.tooltip(graphics, tip, mouseX, mouseY)
-        } catch (e: Throwable) {
-            broken = true
-            Log.error("Could not put hover text on Xaero's right-click menu", e)
         }
     }
 
@@ -91,5 +88,5 @@ object MenuTips {
 
     private val hooks: Hooks by lazy { Hooks() }
 
-    private var broken = false
+    private val guard = Guard("menu hover text is off")
 }

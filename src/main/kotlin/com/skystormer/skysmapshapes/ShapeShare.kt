@@ -379,13 +379,12 @@ object ShapeShare {
 
     private val PLAYER_NAME = Regex("[A-Za-z0-9_]{1,16}")
 
-    private var ticks = 0
+    private val sending = Every(SEND_EVERY)
 
     /** Called every client tick: sends the next waiting message. */
     fun tick() {
         if (waiting.isEmpty()) return
-        if (++ticks < SEND_EVERY) return
-        ticks = 0
+        if (!sending.due()) return
         val connection = Minecraft.getInstance().connection ?: run { waiting.clear(); return }
         val (player, line) = waiting.removeFirst()
         val command = "${Config.privateShareCommand} $player $line"
