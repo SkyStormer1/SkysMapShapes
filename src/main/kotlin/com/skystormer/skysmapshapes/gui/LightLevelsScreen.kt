@@ -110,9 +110,7 @@ class LightLevelsScreen(private val parent: Screen?) : FramedScreen(Component.li
             // The overlay on the spots, drawn by this mod instead of Litematica's, so it can be toned down.
             val overlayTip = "Spawn proofing's spots get this mod's overlay instead of Litematica's: "
             addRenderableWidget(
-                CycleButton.builder<Int>({ Component.literal(Colours.name(it)).withStyle { s -> s.withColor(it and 0xFFFFFF) } }, spawnProofColour)
-                    .withValues(Colours.entries.map { it.argb }.let { if (spawnProofColour in it) it else listOf(spawnProofColour) + it })
-                    .create(left, y, third, ROW, Component.literal("Overlay")) { _, value -> spawnProofColour = value }
+                Widgets.colourButton(left, y, third, "Overlay", spawnProofColour) { spawnProofColour = it }
                     .also { it.setTooltip(Tooltip.create(Component.literal(overlayTip +
                         "its colour, also used for the through-blocks outline. Your other Litematica placements keep Litematica's colours."))) }
             )

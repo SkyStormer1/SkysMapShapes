@@ -171,8 +171,12 @@ object ShapeLabels {
         return true
     }
 
+    /** The last line of a shape's tooltip: what right-clicking it offers. */
+    fun rightClickHint(fromMiniHud: Boolean): String =
+        if (fromMiniHud) "From MiniHUD · right-click to edit or hide" else "Right-click to edit or delete"
+
     fun describe(shape: MapShape): Component = Component.literal(shape.name).append(
-        Component.literal("\n${shape.describeSize()}\n${shape.describePosition()}\n" + if (shape.fromMiniHud) "From MiniHUD · right-click to edit or hide" else "Right-click to edit or delete")
+        Component.literal("\n${shape.describeSize()}\n${shape.describePosition()}\n" + rightClickHint(shape.fromMiniHud))
             .withStyle { it.withColor(0xDDDDDD) }
     )
 

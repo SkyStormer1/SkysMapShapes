@@ -157,7 +157,7 @@ class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("S
             val text = StringWidget(left, y + 6, textWidth - GAP, font.lineHeight, line, font)
             text.setTooltip(Tooltip.create(Component.literal(
                 "${shape.name}\n${shape.describeSize()}\n${shape.describePosition()}\n${Dimensions.name(shape.dimension)}" +
-                    (if (shape is Shape) "\nThickness ${ThicknessSlider.format(shape.lineWidth)}" else "\nFrom MiniHUD: Edit opens it in MiniHUD")
+                    (if (shape is Shape) "\nThickness ${Thickness.format(shape.lineWidth)}" else "\nFrom MiniHUD: Edit opens it in MiniHUD")
             )))
             row(text)
 
