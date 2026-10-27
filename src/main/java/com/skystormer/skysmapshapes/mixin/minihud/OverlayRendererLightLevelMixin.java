@@ -21,7 +21,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * MiniHUD's answer is whether there is anything to draw, so it is given again for what is left.
  * And in the Nether, which floors count as ones mobs can spawn on is {@link NetherSpawns#floor}'s.
  * What is left is also what {@link SpawnProofing#gather} covers with Litematica blocks.
- * Only applied when MiniHUD is installed (see {@link MiniHudMixinPlugin}).
+ * Only applied when MiniHUD is installed (see {@link com.skystormer.skysmapshapes.plugin.MiniHudMixinPlugin}).
  */
 @Pseudo
 @Mixin(targets = "fi.dy.masa.minihud.renderer.OverlayRendererLightLevel", remap = false)

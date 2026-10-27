@@ -19,7 +19,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * through (the render layer bypass, with {@link RayTraceUtilsMixin}), so it works whatever layers
  * you build with.
  *
- * <p>Only applied when Litematica is installed (see {@link LitematicaMixinPlugin}).
+ * <p>Only applied when Litematica is installed (see {@link com.skystormer.skysmapshapes.plugin.LitematicaMixinPlugin}).
  */
 @Pseudo
 @Mixin(targets = "fi.dy.masa.litematica.util.EasyPlaceUtils", remap = false)

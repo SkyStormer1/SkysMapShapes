@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * every block outside your render layers. Spawn proofing's spots are let through, so Easy Place
  * finds them whatever layers you build with; every other block still follows your layers. With
  * {@link EasyPlaceUtilsMixin}, which lets Easy Place place there.
- * Only applied when Litematica is installed (see {@link LitematicaMixinPlugin}).
+ * Only applied when Litematica is installed (see {@link com.skystormer.skysmapshapes.plugin.LitematicaMixinPlugin}).
  */
 @Pseudo
 @Mixin(targets = "fi.dy.masa.litematica.util.RayTraceUtils", remap = false)

@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * layers (with X or Z layers, whole chunks miss them). A chunk holding one of spawn proofing's spots
  * is drawn anyway; inside it, only the spots get past your layers (see
  * {@link ChunkRendererSchematicVboMixin}). Only applied when Litematica is installed (see
- * {@link LitematicaMixinPlugin}).
+ * {@link com.skystormer.skysmapshapes.plugin.LitematicaMixinPlugin}).
  */
 @Pseudo
 @Mixin(targets = "fi.dy.masa.litematica.schematic.placement.SchematicPlacementManager", remap = false)
