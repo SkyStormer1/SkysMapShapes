@@ -17,6 +17,7 @@ import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.SharedConstants
 import net.minecraft.client.KeyMapping
+import net.minecraft.client.gui.screens.Screen
 import net.minecraft.resources.Identifier
 
 object ShapesClient : ClientModInitializer {
@@ -84,7 +85,7 @@ object ShapesClient : ClientModInitializer {
         // The Shapes panel on Xaero's world map, which docks with Sky's Map Exposer's bar and Sky's
         // Structure Map's legend.
         ScreenEvents.AFTER_INIT.register { _, screen, _, _ ->
-            if (Config.enabled && screen.javaClass.name == "xaero.map.gui.GuiMap") {
+            if (Config.enabled && isWorldMap(screen)) {
                 try {
                     ShapesPanel.addTo(screen)
                     AddShapeWindow.install(screen)
@@ -114,7 +115,7 @@ object ShapesClient : ClientModInitializer {
             if (!hookChecked) {
                 hookChecked = true
                 reportMinimapHooks()
-                if (hasHook("xaero.map.gui.GuiMap", "drawShapes")) Log.info("Xaero hooks installed") else Log.warn("This version of Xaero's World Map is not supported; shapes will not be drawn on it")
+                if (hasHook(WORLD_MAP, "drawShapes")) Log.info("Xaero hooks installed") else Log.warn("This version of Xaero's World Map is not supported; shapes will not be drawn on it")
             }
             if (!labelsAdded) {
                 labelsAdded = try {
@@ -131,12 +132,17 @@ object ShapesClient : ClientModInitializer {
             BeaconBeams.tick()
             ShapeShare.tick()
             // Hover only means anything while the world map is open.
-            if (client.gui.screen()?.javaClass?.name != "xaero.map.gui.GuiMap") ShapeHover.clear()
+            if (!isWorldMap(client.gui.screen())) ShapeHover.clear()
             while (listKey.consumeClick()) {
                 if (client.gui.screen() == null) client.gui.setScreen(ShapeListScreen(null))
             }
         }
     }
+
+    /** Whether [screen] is Xaero's world map. Told by class name, so nothing of Xaero's is loaded to ask. */
+    fun isWorldMap(screen: Screen?): Boolean = screen?.javaClass?.name == WORLD_MAP
+
+    private const val WORLD_MAP = "xaero.map.gui.GuiMap"
 
     /**
      * Which of the two minimap hooks made it in: the one for terrain drawn from the world map, and

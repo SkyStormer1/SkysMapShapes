@@ -132,7 +132,7 @@ class ShapeEditScreen private constructor(
                 .withValues(Shape.Type.entries)
                 .create(left, y, third, ROW, Component.literal("Shape")) { _, value -> keepEdits(); type = value; rebuildWidgets() }
         )
-        addRenderableWidget(colourButton(left + third + GAP, y, third))
+        addRenderableWidget(Widgets.colourButton(left + third + GAP, y, third, "Colour", colour) { colour = it })
         addRenderableWidget(
             CycleButton.onOffBuilder(fill)
                 .create(left + (third + GAP) * 2, y, third, ROW, Component.literal("Fill")) { _, on -> fill = on }
@@ -201,8 +201,10 @@ class ShapeEditScreen private constructor(
         }
         y += ROW + GAP
 
-        addRenderableWidget(ThicknessSlider(left, y, WIDTH, ROW, lineWidth,
-            "How thick this shape's outline is drawn, whatever the zoom. The Thickness scale in the settings makes every shape thicker or thinner at once.") { lineWidth = it })
+        addRenderableWidget(ConfigScreen.Slider(left, y, WIDTH, Thickness.toSlider(lineWidth), { "Thickness: ${Thickness.format(Thickness.of(it))}" },
+            "How thick this shape's outline is drawn, whatever the zoom. The Thickness scale in the settings makes every shape thicker or thinner at once.") {
+            lineWidth = Thickness.of(it)
+        })
         y += ROW + GAP
 
         // Presets are for shaping a new one; editing an existing shape keeps the screen shorter.
@@ -328,14 +330,6 @@ class ShapeEditScreen private constructor(
         }
     }
 
-    private fun colourButton(x: Int, y: Int, width: Int): CycleButton<Int> {
-        // A colour set by hand in the file is kept as a choice of its own.
-        val choices = Colours.entries.map { it.argb }.let { if (colour in it) it else listOf(colour) + it }
-        return CycleButton.builder<Int>({ Component.literal(Colours.name(it)).withStyle { s -> s.withColor(it and 0xFFFFFF) } }, colour)
-            .withValues(choices)
-            .create(x, y, width, ROW, Component.literal("Colour")) { _, value -> colour = value }
-    }
-
     /** The waypoints on Xaero's world map for this dimension, as names and block positions. */
     private fun waypoints(): List<Triple<String, Int, Int>> = try {
         if (!SupportMods.minimap() || Dimensions.ofMap() != dimension) emptyList()
@@ -447,13 +441,8 @@ class ShapeEditScreen private constructor(
         addRenderableWidget(StringWidget(x, y + 6, width, font.lineHeight, Component.literal(text), font))
     }
 
-    private fun field(x: Int, y: Int, width: Int, value: String, hint: String, maxLength: Int): EditBox {
-        val box = EditBox(font, x, y, width, ROW, Component.literal(hint))
-        box.setMaxLength(maxLength)
-        box.setValue(value)
-        box.setHint(Component.literal(hint))
-        return addRenderableWidget(box)
-    }
+    private fun field(x: Int, y: Int, width: Int, value: String, hint: String, maxLength: Int): EditBox =
+        addRenderableWidget(Widgets.field(font, x, y, width, value, hint, maxLength))
 
     companion object {
         /** A shape someone shared in chat, to look at before it is kept. */

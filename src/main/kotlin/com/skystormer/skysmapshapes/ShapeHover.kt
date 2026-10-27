@@ -56,7 +56,7 @@ object ShapeHover {
             lines.add(Component.literal(shape.name).withStyle { it.withColor(shape.colour and 0xFFFFFF) })
             lines.add(Component.literal(shape.describeSize()).withStyle { it.withColor(0xDDDDDD) })
         }
-        lines.add(Component.literal(if (shapes.all { it.fromMiniHud }) "From MiniHUD · right-click to edit or hide" else "Right-click to edit or delete").withStyle { it.withColor(0xBBBBBB) })
+        lines.add(Component.literal(ShapeLabels.rightClickHint(shapes.all { it.fromMiniHud })).withStyle { it.withColor(0xBBBBBB) })
         graphics.setComponentTooltipForNextFrame(Minecraft.getInstance().font, lines, mouseX, mouseY)
     }
 

@@ -249,10 +249,7 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
             })
             val colourLeft = left + nameWidth + radiusWidth + GAP * 2
             addRenderableWidget(
-                CycleButton.builder<Int>({ Component.literal(Colours.name(it)).withStyle { s -> s.withColor(it and 0xFFFFFF) } }, preset.colour)
-                    .withValues(Colours.entries.map { it.argb }.let { if (preset.colour in it) it else listOf(preset.colour) + it })
-                    .displayOnlyValue()
-                    .create(colourLeft, y, left + panelWidth - colourLeft, ROW, Component.literal("Colour")) { _, value -> preset.colour = value }
+                Widgets.colourButton(colourLeft, y, left + panelWidth - colourLeft, "Colour", preset.colour, nameOnly = true) { preset.colour = it }
             )
             y += ROW + GAP
         }
@@ -333,13 +330,8 @@ class ConfigScreen(private val parent: Screen?) : FramedScreen(Component.literal
     }
 
 
-    private fun field(x: Int, y: Int, width: Int, value: String, hint: String, maxLength: Int): EditBox {
-        val box = EditBox(font, x, y, width, ROW, Component.literal(hint))
-        box.setMaxLength(maxLength)
-        box.setValue(value)
-        box.setHint(Component.literal(hint))
-        return addRenderableWidget(box)
-    }
+    private fun field(x: Int, y: Int, width: Int, value: String, hint: String, maxLength: Int): EditBox =
+        addRenderableWidget(Widgets.field(font, x, y, width, value, hint, maxLength))
 
     internal companion object {
         const val WIDTH = 300
