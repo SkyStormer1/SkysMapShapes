@@ -11,7 +11,6 @@ import com.skystormer.skysmapshapes.MiniHudShape
 import com.skystormer.skysmapshapes.MiniHudShapes
 import com.skystormer.skysmapshapes.Shape
 import com.skystormer.skysmapshapes.ShapeStore
-import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.AbstractWidget
 import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.components.CycleButton
@@ -32,23 +31,18 @@ import kotlin.math.hypot
  *
  * Opened from the settings or a key you can bind in Controls. The mouse wheel turns the pages.
  */
-class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("Shapes")) {
+class ShapeListScreen(parent: Screen?) : PanelScreen(parent, Component.literal("Shapes")) {
 
-    private var page = 0
     private var query = ""
     private var allDimensions = false
 
-    /** The widgets of the list itself, replaced on every change without touching the search box. */
-    private val rowWidgets = ArrayList<AbstractWidget>()
-    private var rowsTop = 0
-    private var rows = 0
-    private lateinit var pageLabel: StringWidget
-    private lateinit var previous: Button
-    private lateinit var next: Button
+    /** The list itself, replaced on every change without touching the search box. */
+    private val list = PagedRows({ addRenderableWidget(it) }, { removeWidget(it) })
     private lateinit var showAll: Button
 
-    private val left get() = width / 2 - listWidth / 2
-    private val listWidth get() = minOf(MAX_WIDTH, width - 16)
+    override val columnWidth: Int get() = minOf(MAX_WIDTH, width - 16)
+    override val margin = 6
+    private val listWidth get() = columnWidth
 
     override fun init() {
         var y = 6
@@ -63,25 +57,23 @@ class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("S
         search.setHint(Component.literal("Search names…"))
         search.setMaxLength(64)
         search.value = query
-        search.setResponder { query = it; page = 0; refreshRows() }
+        search.setResponder { query = it; list.page = 0; refreshRows() }
         addRenderableWidget(search)
         addRenderableWidget(
             CycleButton.builder<Boolean>({ Component.literal(if (it) "All dimensions" else "This dimension") }, allDimensions)
                 .withValues(listOf(false, true))
                 .displayOnlyValue()
-                .create(left + half + GAP, y, listWidth - half - GAP, ROW, Component.literal("Dimension")) { _, all -> allDimensions = all; page = 0; refreshRows() }
+                .create(left + half + GAP, y, listWidth - half - GAP, ROW, Component.literal("Dimension")) { _, all -> allDimensions = all; list.page = 0; refreshRows() }
         )
         y += ROW + GAP * 2
 
-        rowsTop = y
+        list.top = y
         val footer = (ROW + GAP) * 2 + GAP * 2
-        rows = ((height - rowsTop - footer - 4) / (ROW + GAP)).coerceAtLeast(2)
-        y = rowsTop + rows * (ROW + GAP) + GAP
+        list.rows = ((height - list.top - footer - 4) / (ROW + GAP)).coerceAtLeast(2)
+        y = list.top + list.rows * (ROW + GAP) + GAP
 
         val fifth = (listWidth - GAP * 4) / 5
-        previous = addRenderableWidget(Button.builder(Component.literal("<")) { page--; refreshRows() }.bounds(left, y, fifth, ROW).build())
-        pageLabel = addRenderableWidget(StringWidget(left + fifth + GAP, y + 6, fifth, font.lineHeight, Component.empty(), font))
-        next = addRenderableWidget(Button.builder(Component.literal(">")) { page++; refreshRows() }.bounds(left + (fifth + GAP) * 2, y, fifth, ROW).build())
+        list.buttons(font, left, y, fifth) { refreshRows() }
         showAll = addRenderableWidget(Button.builder(Component.literal("Show all")) { showAll() }
             .bounds(left + (fifth + GAP) * 3, y, fifth, ROW).build())
         addRenderableWidget(Button.builder(Component.literal("Hide all")) { hideAll() }
@@ -110,15 +102,8 @@ class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("S
     }
 
     private fun refreshRows() {
-        rowWidgets.forEach(::removeWidget)
-        rowWidgets.clear()
-
         val shapes = shapes()
-        val pages = maxOf(1, (shapes.size + rows - 1) / rows)
-        page = page.coerceIn(0, pages - 1)
-        pageLabel.message = Component.literal("${page + 1} / $pages")
-        previous.active = page > 0
-        next.active = page < pages - 1
+        val shown = list.pageOf(shapes)
         val remembered = ShapeStore.hiddenByHideAll(shapes)
         showAll.setTooltip(Tooltip.create(Component.literal(
             if (remembered > 0) "Bring back the $remembered shape${if (remembered == 1) "" else "s"} Hide all hid here, and no others. Press it again after to show every shape."
@@ -131,7 +116,7 @@ class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("S
                 query.isNotBlank() -> "No shapes match \"$query\"."
                 else -> "No shapes in this dimension. Choose All dimensions to see the rest."
             }
-            row(StringWidget(left, rowsTop + 6, listWidth, font.lineHeight, Component.literal(text), font))
+            row(StringWidget(left, list.top + 6, listWidth, font.lineHeight, Component.literal(text), font))
             return
         }
 
@@ -141,8 +126,8 @@ class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("S
         val buttonWidth = 40
         val buttons = 4
         val textWidth = listWidth - (buttonWidth + GAP) * buttons
-        var y = rowsTop
-        for (shape in shapes.drop(page * rows).take(rows)) {
+        var y = list.top
+        for (shape in shown) {
             val name = Component.literal(shape.name).withStyle {
                 if (shape.visible) it.withColor(shape.colour and 0xFFFFFF) else it.withColor(HIDDEN).withItalic(true)
             }
@@ -214,7 +199,7 @@ class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("S
     }
 
     private fun row(widget: AbstractWidget) {
-        rowWidgets.add(addRenderableWidget(widget))
+        list.add(widget)
     }
 
     private fun hideAll() {
@@ -267,31 +252,18 @@ class ShapeListScreen(private val parent: Screen?) : Screen(Component.literal("S
     private fun currentDimension(): String? =
         (if (parent is MapCamera) Dimensions.ofMap() else null) ?: Dimensions.ofPlayer()
 
-    /** A dark panel behind everything, so the text reads over any background. */
-    override fun extractBackground(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
-        super.extractBackground(graphics, mouseX, mouseY, partialTick)
-        graphics.fill(left - 6, 2, left + listWidth + 6, height - 2, PANEL)
-    }
-
     override fun mouseScrolled(mouseX: Double, mouseY: Double, scrollX: Double, scrollY: Double): Boolean {
         if (scrollY != 0.0) {
-            page += if (scrollY < 0) 1 else -1
+            list.page += if (scrollY < 0) 1 else -1
             refreshRows()
             return true
         }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY)
     }
 
-    override fun onClose() {
-        minecraft.gui.setScreen(parent)
-    }
-
     companion object {
         private const val MAX_WIDTH = 420
         private const val DETAILS = 0xE0E0E0
         private const val HIDDEN = 0xB0B0B0
-        private const val PANEL = 0xC0101010.toInt()
-        private const val ROW = 20
-        private const val GAP = 2
     }
 }

@@ -5,7 +5,6 @@ import com.skystormer.skysmapshapes.MapMenus
 import com.skystormer.skysmapshapes.MiniHudShape
 import com.skystormer.skysmapshapes.MiniHudShapes
 import com.skystormer.skysmapshapes.ShapeStore
-import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.components.CycleButton
 import net.minecraft.client.gui.components.MultiLineTextWidget
@@ -20,14 +19,12 @@ import net.minecraft.network.chat.Component
  * two switches that each leave the other alone. Changes happen as they are clicked.
  */
 class MiniHudVisibilityScreen(
-    private val parent: Screen?,
+    parent: Screen?,
     shape: MiniHudShape,
-) : Screen(Component.literal("Show or hide ${shape.name}")) {
+) : PanelScreen(parent, Component.literal("Show or hide ${shape.name}")) {
 
     private val id = shape.id
     private var shape = shape
-
-    private val left get() = width / 2 - WIDTH / 2
 
     override fun init() {
         // Each change re-reads MiniHUD, so the shape is looked up again by its id.
@@ -70,21 +67,5 @@ class MiniHudVisibilityScreen(
         top += note.height + GAP * 4
 
         addRenderableWidget(Button.builder(CommonComponents.GUI_DONE) { onClose() }.bounds(left, top, WIDTH, ROW).build())
-    }
-
-    override fun extractBackground(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
-        super.extractBackground(graphics, mouseX, mouseY, partialTick)
-        graphics.fill(left - 8, 2, left + WIDTH + 8, height - 2, PANEL)
-    }
-
-    override fun onClose() {
-        minecraft.gui.setScreen(parent)
-    }
-
-    private companion object {
-        const val WIDTH = 260
-        const val ROW = 20
-        const val GAP = 2
-        const val PANEL = 0xC0101010.toInt()
     }
 }
