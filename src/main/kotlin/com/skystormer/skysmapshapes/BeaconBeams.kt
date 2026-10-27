@@ -30,7 +30,6 @@ object BeaconBeams {
      */
     private class Beam(val pos: BlockPos, val top: Int, val blocked: List<IntRange>)
 
-    @Volatile
     private var beams: List<Beam> = emptyList()
 
     private val refresh = Every(REFRESH_TICKS, dueFirst = true)

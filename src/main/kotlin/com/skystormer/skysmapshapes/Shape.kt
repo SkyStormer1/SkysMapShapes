@@ -15,8 +15,8 @@ import java.util.UUID
  * @property width a rectangle's or ellipse's size east–west (X), in blocks.
  * @property length a rectangle's or ellipse's size north–south (Z), in blocks.
  * @property lineWidth outline thickness in screen pixels, before the global thickness scale.
- * @property y not used yet: kept so that shapes saved now can later be given a height, for a
- *   version that also shows them in the world.
+ * @property y the height it was made at, when known (a waypoint's, or a shared MiniHUD shape's):
+ *   used as its height when it is made in MiniHUD, and sent along when it is shared.
  */
 data class Shape(
     override val id: String = UUID.randomUUID().toString(),

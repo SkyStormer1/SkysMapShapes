@@ -3,7 +3,7 @@
   "id": "skysmapshapes",
   "version": "${version}",
   "name": "Sky's Map Shapes",
-  "description": "Draw labelled circles, squares and rectangles on Xaero's World Map and Minimap, sized in blocks: despawn spheres, farm areas, claims, anything you want to see at a glance.",
+  "description": "Labelled circles, squares, rectangles, diamonds, octagons and ellipses on Xaero's World Map and Minimap, sized in blocks, and MiniHUD's shapes beside them. With MiniHUD: light levels only inside your shapes, and with Litematica, Easy Place spawn proofing. Beacon beams and the blocks in their way, too.",
   "authors": [
     "SkyStormer1"
   ],

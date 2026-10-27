@@ -66,7 +66,22 @@ Written from a full read of all 73 files on 2026-10-27. Nothing here has been bu
     other check is said again as the plan says. "Switched on" means spawn proofing on with
     Everywhere or a spawn-proofed shape in your dimension. Quiet for 5 s after joining.
   - MiniHUD's light level range counts as tiny under 8 blocks (no fix, says where to change it).
-- [ ] Phase 5: duplicated and stale code
+- [x] Phase 5: duplicated and stale code
+  - 2026-10-27: build passes, 82 tests, 0 failures (ConfigTest 4 new, VolumeTest 1 new). One commit per
+    part (5.1–5.7). Not checked in game yet.
+  - 5.1's commit also holds 5.2's changes to `MiniHudShapes.kt` (staged together by mistake).
+  - 5.2: `Guard(off).run(doing, default) { }` logs "Could not <doing>; <off> until the game restarts".
+    LightLevels' redraw request now switches light levels off on failure too (one guard per object).
+  - 5.3: settings are delegated properties keyed by their own names (`var x by bool(true)`); screens
+    reset with `Config.default(Config::x)`. One unreadable value now costs only that setting.
+  - 5.4: the plugins live in `com.skystormer.skysmapshapes.plugin`, outside the mixin packages. The
+    minimap plugin also accepts `xaerominimapfair` (Xaero's Fair-Play build), as the hook report does.
+  - 5.5: `Volume.Direction` reads `main_axis`/`direction` in either case; unknown names are UP everywhere
+    (before, a lying prism with an unknown axis was drawn pointing east on the map).
+  - 5.6: `PanelScreen` and `PagedRows` in `gui/PanelScreen.kt`; `Widgets` and `Thickness` in `gui/Widgets.kt`.
+  - 5.7 B6 is not a bug: Fabric screen API 5.2.4's `ScreenMixin.beforeInit` makes new per-screen events
+    on every `init` and `resize`, and every listener the map panels add is per-screen.
+  - 5.8 (one `ShapeDraft` for both editors) not done: optional, and large enough for its own session.
 - [ ] Phase 6: defaults, version, notes
 
 ---

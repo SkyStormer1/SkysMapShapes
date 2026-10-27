@@ -88,8 +88,9 @@ object ShapeStore {
         worldKey = key
         val path = FabricLoader.getInstance().configDir.resolve("skysmapshapes").resolve("$key.json")
         file = path
-        all = read(path)
-        readNotes(path)
+        val json = parse(path)
+        all = read(json, path)
+        readNotes(json, path)
         Log.info("Loaded {} shape(s) for {} from {}", all.size, name, path)
     }
 
@@ -312,13 +313,28 @@ object ShapeStore {
     private fun safe(text: String): String = text.replace(Regex("[^A-Za-z0-9._-]"), "_").ifEmpty { "_" }
 
     /**
-     * The shapes in [path]. Anything that cannot be read is skipped, and the file is first copied
-     * aside, because the next save writes only what was read and would lose the rest for good.
+     * The world file at [path], read once for both [read] and [readNotes]; null when there is none
+     * yet, or when it cannot be read at all, which first copies it aside.
      */
-    private fun read(path: Path): List<Shape> {
-        if (!Files.exists(path)) return emptyList()
+    private fun parse(path: Path): JsonObject? {
+        if (!Files.exists(path)) return null
         return try {
-            val json = Files.newBufferedReader(path).use { JsonParser.parseReader(it) }.asJsonObject
+            Files.newBufferedReader(path).use { JsonParser.parseReader(it) }.asJsonObject
+        } catch (e: Exception) {
+            Log.error("Could not read $path", e)
+            keepCopy(path)
+            null
+        }
+    }
+
+    /**
+     * The shapes in [json], read from [path]. Anything that cannot be read is skipped, and the file
+     * is first copied aside, because the next save writes only what was read and would lose the
+     * rest for good.
+     */
+    private fun read(json: JsonObject?, path: Path): List<Shape> {
+        json ?: return emptyList()
+        return try {
             var skipped = false
             val shapes = json.getAsJsonArray("shapes")?.mapNotNull { element ->
                 try {
@@ -353,15 +369,14 @@ object ShapeStore {
      * The notes kept beside the shapes: which MiniHUD shapes are shown or hidden, what Hide all
      * hid, what shapes do to light levels, and which are spawn-proofed.
      */
-    private fun readNotes(path: Path) {
+    private fun readNotes(json: JsonObject?, path: Path) {
         hiddenMiniHud = emptySet()
         shownMiniHud = emptySet()
         hiddenByHideAll = emptyMap()
         lightRoles = emptyMap()
         spawnProofIds = emptySet()
+        json ?: return
         try {
-            if (!Files.exists(path)) return
-            val json = Files.newBufferedReader(path).use { JsonParser.parseReader(it) }.asJsonObject
             hiddenMiniHud = json.getAsJsonArray("hiddenMiniHud")?.map { it.asString }?.toSet() ?: emptySet()
             shownMiniHud = json.getAsJsonArray("shownMiniHud")?.map { it.asString }?.toSet() ?: emptySet()
             hiddenByHideAll = json.getAsJsonObject("hiddenByHideAll")?.entrySet()
