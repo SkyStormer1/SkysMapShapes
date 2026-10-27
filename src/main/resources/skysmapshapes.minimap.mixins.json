@@ -1,6 +1,7 @@
 {
   "required": false,
   "package": "com.skystormer.skysmapshapes.mixin.minimap",
+  "plugin": "com.skystormer.skysmapshapes.plugin.MinimapMixinPlugin",
   "compatibilityLevel": "JAVA_${java_version}",
   "client": [
     "MinimapFBORendererMixin",

@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * Tells {@link MiniHudShapes} when a shape is added to or removed from MiniHUD's list, so the map
  * reads MiniHUD again on the next tick instead of on a timer. Only applied when MiniHUD is
- * installed (see {@link MiniHudMixinPlugin}).
+ * installed (see {@link com.skystormer.skysmapshapes.plugin.MiniHudMixinPlugin}).
  */
 @Pseudo
 @Mixin(targets = "fi.dy.masa.minihud.renderer.shapes.ShapeManager", remap = false)

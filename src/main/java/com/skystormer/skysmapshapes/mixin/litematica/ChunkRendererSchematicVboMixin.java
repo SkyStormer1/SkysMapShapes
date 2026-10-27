@@ -36,7 +36,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * chunk or box holding a spot is built and walked whole, and then every block outside the layers
  * that is not a spot is left out again, one by one (see {@link SpawnProofing#litematicaBoxHasSpot}).
  *
- * <p>Only applied when Litematica is installed (see {@link LitematicaMixinPlugin}).
+ * <p>Only applied when Litematica is installed (see {@link com.skystormer.skysmapshapes.plugin.LitematicaMixinPlugin}).
  */
 @Pseudo
 @Mixin(targets = "fi.dy.masa.litematica.render.schematic.ChunkRendererSchematicVbo", remap = false)

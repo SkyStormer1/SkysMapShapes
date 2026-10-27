@@ -144,7 +144,8 @@ object ShapesClient : ClientModInitializer {
      * this is how a missing one gets noticed rather than shapes quietly not appearing.
      */
     private fun reportMinimapHooks() {
-        if (!FabricLoader.getInstance().isModLoaded("xaerominimap")) return
+        // The same ids as the minimap hooks' MinimapMixinPlugin: the minimap, or its Fair-Play build.
+        if (listOf("xaerominimap", "xaerominimapfair").none(FabricLoader.getInstance()::isModLoaded)) return
         val fromWorldMap = hasHook("xaero.common.mods.SupportXaeroWorldmap", "drawShapes")
         val ownData = hasHook("xaero.common.minimap.render.MinimapFBORenderer", "drawShapes")
         // Applying the class is not the same as finding the spot inside it; the drawing itself
