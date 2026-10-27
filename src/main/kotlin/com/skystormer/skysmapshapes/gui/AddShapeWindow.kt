@@ -9,8 +9,7 @@ import com.skystormer.skysmapshapes.MapMenus
 import com.skystormer.skysmapshapes.MiniHudGeometry
 import com.skystormer.skysmapshapes.MiniHudShapes
 import com.skystormer.skysmapshapes.Shape
-import com.skystormer.skysmapshapes.ShapeStore
-import java.util.UUID
+import com.skystormer.skysmapshapes.ShapeDraft
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -106,7 +105,7 @@ object AddShapeWindow {
 
     private var inMiniHud = false
     private var form: MiniHudGeometry.Form? = null
-    private var lagWarned: String? = null
+    private val draft = ShapeDraft()
     private var message: String? = null
 
     private var frame: Frame? = null
@@ -314,7 +313,7 @@ object AddShapeWindow {
         drag = null
         inMiniHud = false
         form = null
-        lagWarned = null
+        draft.forget()
         message = null
     }
 
@@ -394,7 +393,7 @@ object AddShapeWindow {
         if (type.sized == Shape.Sized.WIDTH_LENGTH && new.sized == Shape.Sized.RADIUS) radiusFromEdges()
         type = new
         if (type.sized == Shape.Sized.RADIUS) fromCorner = false
-        lagWarned = null
+        draft.forget()
         rebuild()
         arm(true)
     }
@@ -498,13 +497,13 @@ object AddShapeWindow {
             val forms = MiniHudGeometry.forms(type)
             if (form !in forms) form = forms.first()
             widgets += Pill(x0, y, if (inMiniHud) half else inner, PILL, { if (inMiniHud) "In: MiniHUD" else "Make it in: Map Shapes" }, { inMiniHud },
-                { whereTip() }) { inMiniHud = !inMiniHud; lagWarned = null; rebuild() }
+                { whereTip() }) { inMiniHud = !inMiniHud; draft.forget(); rebuild() }
             if (inMiniHud) {
                 widgets += Pill(x0 + half + GAP, y, inner - half - GAP, PILL, { "As: " + MiniHudGeometry.formName(type, chosenForm()) }, { false },
                     { "How it stands up in the world. " + MiniHudGeometry.formTip(chosenForm()) + if (forms.size == 1) " MiniHUD has only this for a ${type.title.lowercase()}." else "" },
                     enabled = forms.size > 1) {
                     form = forms[(forms.indexOf(form) + 1) % forms.size]
-                    lagWarned = null
+                    draft.forget()
                 }
             }
             y += PILL + GAP
@@ -591,16 +590,16 @@ object AddShapeWindow {
             // Empty is the default: your feet, or sea level for another dimension.
             if (text.isBlank()) y = null
             else text.trim().toIntOrNull()?.let { y = it.coerceIn(-Shape.MAX_HEIGHT, Shape.MAX_HEIGHT) }
-            lagWarned = null
+            draft.forget()
             return
         }
         val v = text.trim().toDoubleOrNull() ?: return
         when (key) {
             "x" -> if (type.sized == Shape.Sized.RADIUS) cx = v.roundToInt() else { val w = maxX - minX; minX = v - w / 2; maxX = v + w / 2 }
             "z" -> if (type.sized == Shape.Sized.RADIUS) cz = v.roundToInt() else { val l = maxZ - minZ; minZ = v - l / 2; maxZ = v + l / 2 }
-            "r" -> { if (v <= 0 || v > MAX_SIZE) return; radius = v; tracking = false }
-            "w" -> { if (v <= 0 || v > MAX_SIZE) return; val m = (minX + maxX) / 2; minX = m - v / 2; maxX = m + v / 2; tracking = false }
-            "l" -> { if (v <= 0 || v > MAX_SIZE) return; val m = (minZ + maxZ) / 2; minZ = m - v / 2; maxZ = m + v / 2; tracking = false }
+            "r" -> { if (!ShapeDraft.fits(v)) return; radius = v; tracking = false }
+            "w" -> { if (!ShapeDraft.fits(v)) return; val m = (minX + maxX) / 2; minX = m - v / 2; maxX = m + v / 2; tracking = false }
+            "l" -> { if (!ShapeDraft.fits(v)) return; val m = (minZ + maxZ) / 2; minZ = m - v / 2; maxZ = m + v / 2; tracking = false }
             "x1", "x2", "z1", "z2" -> {
                 val b = v.roundToInt()
                 val x1 = if (key == "x1") b else floor(minX).toInt()
@@ -797,27 +796,9 @@ object AddShapeWindow {
     private fun commit() {
         val s = screen ?: return
         val shape = build()
-        val existing = existing
-        if (existing != null && ShapeStore.byId(existing.id) == null) return show("${existing.name} is not on your map any more.")
-        if (!shape.isValid()) return show("That size or place is beyond any world.")
-        if (existing == null && inMiniHud) {
-            val made = shape.copy(id = UUID.randomUUID().toString())
-            val form = chosenForm()
-            val asked = "$type ${made.radius} ${made.width} ${made.length} $form"
-            when (val result = MiniHudShapes.tryCreate(made, y ?: MapMenus.miniHudY(made), form, null, null, warned = lagWarned == asked)) {
-                is MiniHudShapes.CreateResult.Refused -> return show(result.why)
-                is MiniHudShapes.CreateResult.WarnFirst -> {
-                    lagWarned = asked
-                    return show("${result.warning} Press Create again to make it anyway.")
-                }
-                MiniHudShapes.CreateResult.Made -> {}
-            }
-            Log.info("Made {} in MiniHUD from the map", made.name)
-        } else if (existing != null) {
-            ShapeStore.put(shape.copy(id = existing.id, visible = existing.visible))
-        } else {
-            ShapeStore.put(shape.copy(id = UUID.randomUUID().toString()))
-        }
+        val miniHud = if (existing == null && inMiniHud) ShapeDraft.InMiniHud(y ?: MapMenus.miniHudY(shape), chosenForm()) else null
+        draft.save(shape, existing, miniHud, "Create")?.let { return show(it) }
+        if (miniHud != null) Log.info("Made {} in MiniHUD from the map", shape.name)
         close()
         s.setFocused(null)
     }

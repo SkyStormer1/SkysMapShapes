@@ -7,8 +7,8 @@ import com.skystormer.skysmapshapes.MapMenus
 import com.skystormer.skysmapshapes.MiniHudGeometry
 import com.skystormer.skysmapshapes.MiniHudShapes
 import com.skystormer.skysmapshapes.Shape
+import com.skystormer.skysmapshapes.ShapeDraft
 import com.skystormer.skysmapshapes.ShapeShare
-import com.skystormer.skysmapshapes.ShapeStore
 import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.components.CycleButton
 import net.minecraft.client.gui.components.EditBox
@@ -73,7 +73,7 @@ class ShapeEditScreen private constructor(
     private var form: MiniHudGeometry.Form? = null
 
     /** The shape last warned about being big enough to slow the game, so a second Save makes it. */
-    private var lagWarned: String? = null
+    private val draft = ShapeDraft()
 
     private var xText = x.toString()
     private var zText = z.toString()
@@ -376,31 +376,16 @@ class ShapeEditScreen private constructor(
 
     private fun save() {
         keepEdits()
-        // It may have been deleted or moved into MiniHUD while this screen stayed open.
-        if (existing != null && ShapeStore.byId(existing.id) == null) {
-            return show("${existing.name} is not on your map any more.")
-        }
-        val shape = readShape(::show) ?: return
-        // A place far past the world border would be thrown away, with the whole file, on the next join.
-        if (!shape.isValid()) return show("That size or place is beyond any world.")
-        if (existing == null && inMiniHud) {
-            // A shape big enough to slow the game is made on the second press, once that has been said.
-            val asked = "$type $radiusText $widthText $lengthText $form"
+        val shape = (readShape(::show) ?: return).copy(y = existing?.y ?: sharedY)
+        val miniHud = if (existing == null && inMiniHud) ShapeDraft.InMiniHud(
+            sharedY ?: MapMenus.miniHudY(shape), form, sharedMiniHudType,
             // The shared sizes hold only while the outline is still the one shared.
-            val sizes = sharedSizes?.takeIf { from != null && sameOutline(shape, from) }
-            val y = sharedY ?: MapMenus.miniHudY(shape)
-            when (val result = MiniHudShapes.tryCreate(shape, y, form, sharedMiniHudType, sizes, warned = lagWarned == asked)) {
-                is MiniHudShapes.CreateResult.Refused -> return show(result.why)
-                is MiniHudShapes.CreateResult.WarnFirst -> {
-                    lagWarned = asked
-                    return show("${result.warning} Press Save again to make it anyway.")
-                }
-                MiniHudShapes.CreateResult.Made -> {}
-            }
+            sharedSizes?.takeIf { from != null && sameOutline(shape, from) },
+        ) else null
+        draft.save(shape, existing, miniHud, "Save")?.let { return show(it) }
+        if (miniHud != null) {
             MapMenus.say("Made ${shape.name} in MiniHUD" + (form?.let { " as a " + MiniHudGeometry.formName(type, it).lowercase() } ?: "") +
                 if (Dimensions.ofPlayer() == dimension) "" else ", there when you next go to the ${Dimensions.name(dimension)}")
-        } else {
-            ShapeStore.put(if (existing != null) shape.copy(id = existing.id, visible = existing.visible, y = existing.y) else shape.copy(y = sharedY))
         }
         minecraft.gui.setScreen(parent)
     }
@@ -412,12 +397,12 @@ class ShapeEditScreen private constructor(
         val z = zText.toIntOrNull() ?: return wrong("Type a whole number for Z.")
         return when (type.sized) {
             Shape.Sized.RADIUS -> {
-                val radius = size(radiusText) ?: return wrong("Type a size in blocks, more than 0.")
+                val radius = ShapeDraft.size(radiusText) ?: return wrong("Type a size in blocks, more than 0.")
                 Shape(label = label.trim(), dimension = dimension, type = type, x = x, z = z, radius = radius, colour = colour, fill = fill, lineWidth = lineWidth)
             }
             Shape.Sized.WIDTH_LENGTH -> {
-                val w = size(widthText) ?: return wrong("Type a width in blocks, more than 0.")
-                val l = size(lengthText) ?: return wrong("Type a length in blocks, more than 0.")
+                val w = ShapeDraft.size(widthText) ?: return wrong("Type a width in blocks, more than 0.")
+                val l = ShapeDraft.size(lengthText) ?: return wrong("Type a length in blocks, more than 0.")
                 Shape(label = label.trim(), dimension = dimension, type = type, x = x, z = z, width = w, length = l, anchor = if (type == Shape.Type.RECTANGLE) anchor else Shape.Anchor.CENTRE, colour = colour, fill = fill, lineWidth = lineWidth)
             }
         }
@@ -425,8 +410,6 @@ class ShapeEditScreen private constructor(
 
     private fun sameOutline(a: Shape, b: Shape) = a.type == b.type && a.x == b.x && a.z == b.z && a.radius == b.radius &&
         a.width == b.width && a.length == b.length && a.anchor == b.anchor
-
-    private fun size(text: String): Double? = text.trim().toDoubleOrNull()?.takeIf { it > 0 && it <= MAX_SIZE }
 
     private fun show(text: String) {
         message = Component.literal(text)
@@ -461,7 +444,6 @@ class ShapeEditScreen private constructor(
         private const val ROW = 20
         private const val GAP = 2
         private const val LABEL = 72
-        private const val MAX_SIZE = Shape.MAX_TYPED_SIZE
 
         /** How many times its outline's size a shared MiniHUD shape may be before it starts out of MiniHUD. */
         private const val BIGGER_THAN_OUTLINE = 1.5

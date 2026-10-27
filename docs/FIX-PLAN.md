@@ -81,7 +81,10 @@ Written from a full read of all 73 files on 2026-10-27. Nothing here has been bu
   - 5.6: `PanelScreen` and `PagedRows` in `gui/PanelScreen.kt`; `Widgets` and `Thickness` in `gui/Widgets.kt`.
   - 5.7 B6 is not a bug: Fabric screen API 5.2.4's `ScreenMixin.beforeInit` makes new per-screen events
     on every `init` and `resize`, and every listener the map panels add is per-screen.
-  - 5.8 (one `ShapeDraft` for both editors) not done: optional, and large enough for its own session.
+  - 5.8 done afterwards (2026-10-27, 84 tests, 0 failures): `ShapeDraft` holds the save step both editors
+    shared (still there, valid, MiniHUD create with the press-again warning, or saved on the map) and the
+    typed size check. The editors keep their own fields: the add window holds live numbers dragged on the
+    map, the edit screen typed text, so only the finished shape goes through `ShapeDraft`.
 - [x] Phase 6: defaults, version, notes
   - 2026-10-27: build passes, 82 tests, 0 failures. Jar: `build/libs/skysmapshapes-1.7.1+26.3.jar`.
   - Beacon defaults 200 and 12 in the settings table; a saved config keeps its own values.
