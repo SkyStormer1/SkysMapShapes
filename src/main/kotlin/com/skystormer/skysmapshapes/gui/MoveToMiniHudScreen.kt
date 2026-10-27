@@ -3,7 +3,6 @@ package com.skystormer.skysmapshapes.gui
 import com.skystormer.skysmapshapes.Dimensions
 import com.skystormer.skysmapshapes.MiniHudGeometry
 import com.skystormer.skysmapshapes.Shape
-import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.components.CycleButton
 import net.minecraft.client.gui.components.MultiLineTextWidget
@@ -19,16 +18,14 @@ import net.minecraft.network.chat.Component
  * like the shape on the map. [move] is given the form picked and does the moving.
  */
 internal class MoveToMiniHudScreen(
-    private val parent: Screen?,
+    parent: Screen?,
     private val shape: Shape,
     private val y: Int,
     private val move: (MiniHudGeometry.Form) -> Unit,
-) : Screen(Component.literal("Move ${shape.name} into MiniHUD?")) {
+) : PanelScreen(parent, Component.literal("Move ${shape.name} into MiniHUD?")) {
 
     private val forms = MiniHudGeometry.forms(shape.type)
     private var form = forms.first()
-
-    private val left get() = width / 2 - WIDTH / 2
 
     override fun init() {
         var top = maxOf(6, (height - 190) / 2)
@@ -82,21 +79,4 @@ internal class MoveToMiniHudScreen(
             if (forms.size > 1) "\nFrom above it looks the same on the map whichever you pick."
             else "\nMiniHUD has only this for a ${shape.type.title.lowercase()}."
     ))
-
-    /** A dark panel behind it, so it reads over the map or the world. */
-    override fun extractBackground(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
-        super.extractBackground(graphics, mouseX, mouseY, partialTick)
-        graphics.fill(left - 8, 2, left + WIDTH + 8, height - 2, PANEL)
-    }
-
-    override fun onClose() {
-        minecraft.gui.setScreen(parent)
-    }
-
-    private companion object {
-        const val WIDTH = 260
-        const val ROW = 20
-        const val GAP = 2
-        const val PANEL = 0xC0101010.toInt()
-    }
 }
