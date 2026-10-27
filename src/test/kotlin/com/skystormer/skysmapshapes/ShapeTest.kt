@@ -2,6 +2,8 @@ package com.skystormer.skysmapshapes
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotSame
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -104,5 +106,35 @@ class ShapeTest {
         assertEquals(Colours.RED.argb, Colours.parse(Colours.format(Colours.RED.argb)))
         assertEquals("Red", Colours.name(Colours.RED.argb))
         assertEquals("#123456", Colours.name(Colours.parse("#123456")!!))
+    }
+
+    @Test
+    fun anOutlineIsMadeOnceAndAChangedCopyGetsItsOwn() {
+        val c = circle(32.0)
+        assertSame(c.geometry, c.geometry)
+        val bigger = c.copy(radius = 64.0)
+        assertEquals(100.5 + 64, bigger.bounds.maxX)
+        assertEquals(100.5 + 32, c.bounds.maxX)
+    }
+
+    @Test
+    fun curvePointsAreReusedAtTheSameZoomAndRemadeAtAnother() {
+        val g = circle(500.0).geometry
+        assertSame(g.points(1f), g.points(1f))
+        assertNotSame(g.points(1f), g.points(8f))
+        val e = Geometry.Ellipse(0.0, 0.0, 100.0, 50.0)
+        assertSame(e.points(1f), e.points(1f))
+        assertEquals(0.0, e.distanceTo(100.0, 0.0), 0.01)
+    }
+
+    @Test
+    fun aPolygonCountsItsEdgesAsInsideAndFarPointsAsOutside() {
+        val square = Geometry.rectangle(0.0, 0.0, 10.0, 10.0)
+        assertTrue(square.contains(5.0, 5.0))
+        assertTrue(square.contains(10.0, 5.0))
+        assertTrue(square.contains(0.0, 0.0))
+        assertFalse(square.contains(10.1, 5.0))
+        assertFalse(square.contains(-50.0, 5.0))
+        assertEquals(100.0, square.area, 1e-9)
     }
 }

@@ -36,19 +36,38 @@ sealed class Geometry {
     abstract fun contains(px: Double, pz: Double): Boolean
 
     class Circle(val cx: Double, val cz: Double, val radius: Double) : Geometry() {
-        override val bounds get() = Bounds(cx - radius, cz - radius, cx + radius, cz + radius)
-        override val area get() = PI * radius * radius
-        override fun points(blocksPerUnit: Float) = ring(cx, cz, radius, radius, segments(radius, blocksPerUnit))
+        override val bounds = Bounds(cx - radius, cz - radius, cx + radius, cz + radius)
+        override val area = PI * radius * radius
+
+        /** The last outline made and how many points it has: the zoom changes far less often than frames are drawn. */
+        private var made: Pair<Int, DoubleArray>? = null
+
+        override fun points(blocksPerUnit: Float): DoubleArray {
+            val count = segments(radius, blocksPerUnit)
+            made?.let { if (it.first == count) return it.second }
+            return ring(cx, cz, radius, radius, count).also { made = count to it }
+        }
         override fun distanceTo(px: Double, pz: Double) = abs(hypot(px - cx, pz - cz) - radius)
         override fun contains(px: Double, pz: Double) = hypot(px - cx, pz - cz) <= radius
     }
 
     /** An ellipse with radii [rx] east–west and [rz] north–south. */
     class Ellipse(val cx: Double, val cz: Double, val rx: Double, val rz: Double) : Geometry() {
-        override val bounds get() = Bounds(cx - rx, cz - rz, cx + rx, cz + rz)
-        override val area get() = PI * rx * rz
-        override fun points(blocksPerUnit: Float) = ring(cx, cz, rx, rz, segments(maxOf(rx, rz), blocksPerUnit))
-        override fun distanceTo(px: Double, pz: Double) = polygonDistance(ring(cx, cz, rx, rz, 256), true, px, pz)
+        override val bounds = Bounds(cx - rx, cz - rz, cx + rx, cz + rz)
+        override val area = PI * rx * rz
+
+        private var made: Pair<Int, DoubleArray>? = null
+
+        /** The ring distances are measured against: hover asks every frame, so it is made once. */
+        private val measuring by lazy(LazyThreadSafetyMode.PUBLICATION) { ring(cx, cz, rx, rz, 256) }
+
+        override fun points(blocksPerUnit: Float): DoubleArray {
+            val count = segments(maxOf(rx, rz), blocksPerUnit)
+            made?.let { if (it.first == count) return it.second }
+            return ring(cx, cz, rx, rz, count).also { made = count to it }
+        }
+
+        override fun distanceTo(px: Double, pz: Double) = polygonDistance(measuring, true, px, pz)
         override fun contains(px: Double, pz: Double): Boolean {
             val dx = (px - cx) / rx
             val dz = (pz - cz) / rz
@@ -58,36 +77,35 @@ sealed class Geometry {
 
     /** Straight sides through [corners] (x, z, x, z, …); a line when not [closed]. */
     class Polygon(private val corners: DoubleArray, override val closed: Boolean = true) : Geometry() {
-        override val bounds: Bounds
-            get() {
-                var minX = Double.MAX_VALUE; var minZ = Double.MAX_VALUE
-                var maxX = -Double.MAX_VALUE; var maxZ = -Double.MAX_VALUE
-                for (i in 0 until corners.size / 2) {
-                    minX = minOf(minX, corners[i * 2]); maxX = maxOf(maxX, corners[i * 2])
-                    minZ = minOf(minZ, corners[i * 2 + 1]); maxZ = maxOf(maxZ, corners[i * 2 + 1])
-                }
-                return Bounds(minX, minZ, maxX, maxZ)
+        override val bounds: Bounds by lazy(LazyThreadSafetyMode.PUBLICATION) {
+            var minX = Double.MAX_VALUE; var minZ = Double.MAX_VALUE
+            var maxX = -Double.MAX_VALUE; var maxZ = -Double.MAX_VALUE
+            for (i in 0 until corners.size / 2) {
+                minX = minOf(minX, corners[i * 2]); maxX = maxOf(maxX, corners[i * 2])
+                minZ = minOf(minZ, corners[i * 2 + 1]); maxZ = maxOf(maxZ, corners[i * 2 + 1])
             }
+            Bounds(minX, minZ, maxX, maxZ)
+        }
 
-        override val area: Double
-            get() {
-                if (!closed) return 0.0
+        override val area: Double by lazy(LazyThreadSafetyMode.PUBLICATION) {
+            if (!closed) 0.0 else {
                 var sum = 0.0
                 val n = corners.size / 2
                 for (i in 0 until n) {
                     val j = (i + 1) % n
                     sum += corners[i * 2] * corners[j * 2 + 1] - corners[j * 2] * corners[i * 2 + 1]
                 }
-                return abs(sum) / 2
+                abs(sum) / 2
             }
+        }
 
         override fun points(blocksPerUnit: Float) = corners
         override fun distanceTo(px: Double, pz: Double) = polygonDistance(corners, closed, px, pz)
 
         override fun contains(px: Double, pz: Double): Boolean {
             if (!closed) return false
-            // Points on an edge count as inside, as for a circle.
-            if (polygonDistance(corners, true, px, pz) < 1e-9) return true
+            val box = bounds
+            if (px < box.minX - 1e-9 || px > box.maxX + 1e-9 || pz < box.minZ - 1e-9 || pz > box.maxZ + 1e-9) return false
             var inside = false
             val n = corners.size / 2
             var j = n - 1
@@ -97,7 +115,8 @@ sealed class Geometry {
                 if ((zi > pz) != (zj > pz) && px < (xj - xi) * (pz - zi) / (zj - zi) + xi) inside = !inside
                 j = i
             }
-            return inside
+            // Points on an edge count as inside, as for a circle; only worth measuring when the sides say outside.
+            return inside || polygonDistance(corners, true, px, pz) < 1e-9
         }
     }
 

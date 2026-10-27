@@ -60,8 +60,12 @@ data class Shape(
     private val cx get() = x + 0.5
     private val cz get() = z + 0.5
 
-    override val geometry: Geometry
-        get() = when (type) {
+    /**
+     * The outline, made once: drawing, hovering, labels and sorting all ask for it, several times
+     * a frame. Kept in the body rather than the constructor so `copy` and `equals` ignore it.
+     */
+    override val geometry: Geometry by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        when (type) {
             Type.CIRCLE -> Geometry.Circle(cx, cz, radius)
             Type.SQUARE -> Geometry.rectangle(cx - radius, cz - radius, cx + radius, cz + radius)
             Type.RHOMBUS -> Geometry.rhombus(cx, cz, radius)
@@ -72,6 +76,7 @@ data class Shape(
                 Anchor.CORNER -> Geometry.rectangle(x.toDouble(), z.toDouble(), x + width, z + length)
             }
         }
+    }
 
     /** Whether the middle of block ([blockX], [blockZ]) is inside the shape or on its edge. */
     fun contains(blockX: Int, blockZ: Int): Boolean = geometry.contains(blockX + 0.5, blockZ + 0.5)

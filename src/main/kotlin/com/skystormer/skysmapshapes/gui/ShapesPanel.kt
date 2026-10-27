@@ -156,7 +156,17 @@ object ShapesPanel {
         override val background = BACKGROUND
         override val listTop = ROW + 1
 
-        /** The list, from the top again whenever the map changes dimension. */
+        /** What [kept] and [keptWidth] were made from: the dimension shown and the two shape lists' versions. */
+        private var keptDimension: String? = null
+        private var keptStore = -1
+        private var keptMiniHud = -1
+        private var kept: List<MapShape> = emptyList()
+        private var keptWidth = -1
+
+        /**
+         * The list, from the top again whenever the map changes dimension. Made once and kept until
+         * the dimension or a shape changes: the panel asks for it many times a frame.
+         */
         private val listed: List<MapShape>
             get() {
                 val shown = Dimensions.ofMap()
@@ -164,7 +174,14 @@ object ShapesPanel {
                     dimension = shown
                     offset = 0
                 }
-                return shapes()
+                if (shown != keptDimension || ShapeStore.version != keptStore || MiniHudShapes.version != keptMiniHud) {
+                    keptDimension = shown
+                    keptStore = ShapeStore.version
+                    keptMiniHud = MiniHudShapes.version
+                    kept = shapes()
+                    keptWidth = -1
+                }
+                return kept
             }
 
         override fun itemCount() = maxOf(1, listed.size)
@@ -172,13 +189,15 @@ object ShapesPanel {
         private fun switchWidth(label: String) = font().width(label) + 4
 
         override fun naturalWidth(): Int {
+            val list = listed
+            if (keptWidth >= 0) return keptWidth
             val font = font()
             val header = 3 + font.width("- $TITLE") + 8 + switchWidth(HIDE) + 2 + switchWidth(SET) + 2
-            val lines = listed.maxOfOrNull { shape ->
+            val lines = list.maxOfOrNull { shape ->
                 13 + font.width(shortName(shape)) + (tag(shape)?.let { 4 + font.width(it) } ?: 0) + 10 +
                     font.width(shape.describeSizeShort()) + 4 + DockPanel.BAR + 3
             } ?: font.width("No shapes here yet") + 8
-            return maxOf(header, lines, 110)
+            return maxOf(header, lines, 110).also { keptWidth = it }
         }
 
         override fun afterLayout() {

@@ -32,7 +32,7 @@ object MapMenus {
             if (!ShapeStore.isOpen) return@guard Log.warn("Map right-click: no shapes file open (not in a world?)")
             options.add(option("Add shape here", options.size, target) { parent -> add(parent, dim, x, z, "") })
             // Every shape under the click can be edited from here, even one whose label is off screen.
-            val under = ShapeStore.inDimension(dim).filter { it.visible && it.contains(x, z) }
+            val under = ShapeStore.inDimension(dim).filter { it.visible && it.contains(x, z) }.sortedByDescending { it.area }
             for (shape in under.take(MAX_UNDER_CLICK)) {
                 options.add(option("Edit shape: ${shape.name}", options.size, target) { parent -> edit(parent, shape) })
             }

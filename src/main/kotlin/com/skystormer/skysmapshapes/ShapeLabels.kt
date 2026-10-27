@@ -29,6 +29,8 @@ object ShapeLabels {
         var next = 0
         /** How many labels up each shape's is drawn, so labels at the same spot stack instead of overlapping. */
         var stack: Map<String, Int> = emptyMap()
+        /** Label text → its width in pixels, measured once per frame instead of once per box. */
+        val widths = HashMap<String, Int>()
     }
 
     /** 0 for the first label at a spot, 1 for the next one there, and so on. */
@@ -53,6 +55,7 @@ object ShapeLabels {
         override fun begin(location: ElementRenderLocation, context: Context) {
             context.shapes = if (location == ElementRenderLocation.WORLD_MAP) shapesOnWorldMap() else emptyList()
             context.stack = stackOf(context.shapes)
+            context.widths.clear()
             context.next = 0
         }
 
@@ -63,6 +66,7 @@ object ShapeLabels {
         override fun end(location: ElementRenderLocation, context: Context) {
             context.shapes = emptyList()
             context.stack = emptyMap()
+            context.widths.clear()
         }
     }
 
@@ -74,12 +78,12 @@ object ShapeLabels {
         override fun hasYCoordinate(): Boolean = false
         // Xaero only hovers and right-clicks elements that say they can be; the default is no.
         override fun isInteractable(location: ElementRenderLocation, shape: MapShape): Boolean = location == ElementRenderLocation.WORLD_MAP
-        override fun getInteractionBoxLeft(shape: MapShape, context: Context, partialTicks: Float): Int = -halfWidth(shape)
-        override fun getInteractionBoxRight(shape: MapShape, context: Context, partialTicks: Float): Int = halfWidth(shape)
+        override fun getInteractionBoxLeft(shape: MapShape, context: Context, partialTicks: Float): Int = -halfWidth(shape, context)
+        override fun getInteractionBoxRight(shape: MapShape, context: Context, partialTicks: Float): Int = halfWidth(shape, context)
         override fun getInteractionBoxTop(shape: MapShape, context: Context, partialTicks: Float): Int = -HEIGHT - GAP - lift(shape, context)
         override fun getInteractionBoxBottom(shape: MapShape, context: Context, partialTicks: Float): Int = -GAP - lift(shape, context)
-        override fun getRenderBoxLeft(shape: MapShape, context: Context, partialTicks: Float): Int = -halfWidth(shape) - 1
-        override fun getRenderBoxRight(shape: MapShape, context: Context, partialTicks: Float): Int = halfWidth(shape) + 1
+        override fun getRenderBoxLeft(shape: MapShape, context: Context, partialTicks: Float): Int = -halfWidth(shape, context) - 1
+        override fun getRenderBoxRight(shape: MapShape, context: Context, partialTicks: Float): Int = halfWidth(shape, context) + 1
         override fun getRenderBoxTop(shape: MapShape, context: Context, partialTicks: Float): Int = -HEIGHT - GAP - 1 - lift(shape, context)
         override fun getRenderBoxBottom(shape: MapShape, context: Context, partialTicks: Float): Int = 1
         override fun getLeftSideLength(shape: MapShape, minecraft: Minecraft): Int = minecraft.font.width(shape.name) + 9
@@ -147,7 +151,7 @@ object ShapeLabels {
             pose.translate(partialX, partialY, 0.0)
             pose.scale(scale, scale, 1f)
             pose.translate(0.0, -lift(shape, context).toDouble(), 0.0)
-            val half = halfWidth(shape)
+            val half = halfWidth(shape, context)
             val background = if (hovered || ShapeHover.isHovered(shape)) 0xDD000000.toInt() else 0x99000000.toInt()
             graphics.fill(-half, -HEIGHT - GAP, half, -GAP, background)
             if (shape.label.isBlank()) {
@@ -174,8 +178,8 @@ object ShapeLabels {
 
     private fun lift(shape: MapShape, context: Context): Int = (context.stack[shape.id] ?: 0) * (HEIGHT + 1)
 
-    private fun halfWidth(shape: MapShape): Int =
-        if (shape.label.isBlank()) 5 else Minecraft.getInstance().font.width(shape.label) / 2 + 3
+    private fun halfWidth(shape: MapShape, context: Context): Int =
+        if (shape.label.isBlank()) 5 else context.widths.getOrPut(shape.label) { Minecraft.getInstance().font.width(shape.label) } / 2 + 3
 
     private const val ORDER = -100
     private const val HEIGHT = 11

@@ -37,17 +37,25 @@ object ShapeStore {
     /** Read by the render thread every frame, so replaced whole rather than changed in place. */
     @Volatile
     var all: List<Shape> = emptyList()
+        private set(value) { field = value; version++ }
+
+    /**
+     * Goes up whenever the shapes or the hidden and shown notes are replaced, so lists made from
+     * them can be kept until it changes.
+     */
+    @Volatile
+    var version = 0
         private set
 
     /** Ids of MiniHUD shapes hidden on the map, whether or not they are on in MiniHUD. */
     @Volatile
     var hiddenMiniHud: Set<String> = emptySet()
-        private set
+        private set(value) { field = value; version++ }
 
     /** Ids of MiniHUD shapes shown on the map although they are switched off in MiniHUD. */
     @Volatile
     var shownMiniHud: Set<String> = emptySet()
-        private set
+        private set(value) { field = value; version++ }
 
     /**
      * What Hide all hid, so Show all brings back only those: each shape's id, with "map" when it
@@ -256,11 +264,8 @@ object ShapeStore {
     /** How many of [shapes] Hide all hid and Show all would bring back. */
     fun hiddenByHideAll(shapes: List<MapShape>): Int = shapes.count { it.id in hiddenByHideAll }
 
-    /**
-     * The shapes in [dimension], largest first: everything is drawn in this order, so a smaller
-     * shape always shows on top of a larger one it overlaps.
-     */
-    fun inDimension(dimension: String): List<Shape> = all.filter { it.dimension == dimension }.sortedByDescending { it.area }
+    /** The shapes in [dimension], in no particular order; [MapShapes.visibleIn] gives the drawing order. */
+    fun inDimension(dimension: String): List<Shape> = all.filter { it.dimension == dimension }
 
     fun byId(id: String): Shape? = all.firstOrNull { it.id == id }
 
