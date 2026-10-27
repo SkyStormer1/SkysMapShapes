@@ -25,7 +25,15 @@ class SpawnProofBlocksScreen(private val parent: Screen?) : Screen(Component.lit
 
     private val accepted: MutableSet<String> = HashSet(Config.spawnProofBlocks ?: SpawnProofBlocks.defaults())
     private var query = ""
-    private var shown: List<Block> = emptyList()
+    /** A block in the grid, with what drawing and searching it needs, made once. */
+    private class Tile(val block: Block) {
+        val id = SpawnProofBlocks.id(block)
+        val stack = ItemStack(block)
+        val text = (block.name.string + " " + SpawnProofBlocks.kindOf(block)!!.title + " " + id).lowercase()
+    }
+
+    private val tiles: List<Tile> by lazy { SpawnProofBlocks.candidates().map(::Tile) }
+    private var shown: List<Tile> = emptyList()
     private var scroll = 0
     private var draggingBar = false
 
@@ -50,11 +58,11 @@ class SpawnProofBlocksScreen(private val parent: Screen?) : Screen(Component.lit
         search.setResponder { query = it; filter() }
         addRenderableWidget(search)
         addRenderableWidget(Button.builder(Component.literal("All")) {
-            shown.forEach { accepted += SpawnProofBlocks.id(it) }
+            shown.forEach { accepted += it.id }
         }.bounds(left + third + GAP, y, third, ROW)
             .tooltip(Tooltip.create(Component.literal("Accept every block the search shows."))).build())
         addRenderableWidget(Button.builder(Component.literal("None")) {
-            shown.forEach { accepted -= SpawnProofBlocks.id(it) }
+            shown.forEach { accepted -= it.id }
         }.bounds(left + (third + GAP) * 2, y, width - (third + GAP) * 2, ROW)
             .tooltip(Tooltip.create(Component.literal("Accept none of the blocks the search shows."))).build())
         y += ROW + GAP * 3
@@ -79,10 +87,7 @@ class SpawnProofBlocksScreen(private val parent: Screen?) : Screen(Component.lit
 
     private fun filter() {
         val words = query.trim().lowercase().split(' ').filter { it.isNotEmpty() }
-        shown = SpawnProofBlocks.candidates().filter { block ->
-            val text = (block.name.string + " " + SpawnProofBlocks.kindOf(block)!!.title + " " + SpawnProofBlocks.id(block)).lowercase()
-            words.all { text.contains(it) }
-        }
+        shown = tiles.filter { tile -> words.all { tile.text.contains(it) } }
         scroll = scroll.coerceIn(0, maxScroll())
     }
 
@@ -97,22 +102,22 @@ class SpawnProofBlocksScreen(private val parent: Screen?) : Screen(Component.lit
         val gridRight = gridLeft + columns * TILE
         val gridBottom = gridTop + visibleRows * TILE
         graphics.fill(gridLeft - 1, gridTop - 1, gridRight + 1, gridBottom + 1, 0x80000000.toInt())
-        var hovered: Block? = null
+        var hovered: Tile? = null
         for (row in 0 until visibleRows) {
             for (column in 0 until columns) {
-                val block = shown.getOrNull((row + scroll) * columns + column) ?: break
+                val tile = shown.getOrNull((row + scroll) * columns + column) ?: break
                 val x = gridLeft + column * TILE
                 val y = gridTop + row * TILE
-                val on = SpawnProofBlocks.id(block) in accepted
+                val on = tile.id in accepted
                 val over = mouseX in x until x + TILE && mouseY in y until y + TILE
-                if (over) hovered = block
+                if (over) hovered = tile
                 graphics.fill(x + 1, y + 1, x + TILE - 1, y + TILE - 1, when {
                     over -> 0x60FFFFFF
                     on -> 0x4033CC33
                     else -> 0x30FFFFFF
                 })
                 if (on) graphics.outline(x, y, TILE, TILE, ACCEPTED)
-                graphics.item(ItemStack(block), x + (TILE - 16) / 2, y + (TILE - 16) / 2)
+                graphics.item(tile.stack, x + (TILE - 16) / 2, y + (TILE - 16) / 2)
             }
         }
         if (shown.isEmpty()) {
@@ -126,10 +131,10 @@ class SpawnProofBlocksScreen(private val parent: Screen?) : Screen(Component.lit
             graphics.fill(left, thumbTop(), left + BAR, thumbTop() + thumbHeight(), 0xC0FFFFFF.toInt())
         }
 
-        hovered?.let { block ->
-            val on = SpawnProofBlocks.id(block) in accepted
+        hovered?.let { tile ->
+            val on = tile.id in accepted
             graphics.setComponentTooltipForNextFrame(font, listOf(
-                block.name,
+                tile.block.name,
                 Component.literal(if (on) "Accepted: click to remove" else "Not accepted: click to accept")
                     .withStyle { it.withColor(if (on) ACCEPTED and 0xFFFFFF else 0x999999) },
             ), mouseX, mouseY)
@@ -150,11 +155,11 @@ class SpawnProofBlocksScreen(private val parent: Screen?) : Screen(Component.lit
                 dragBarTo(y)
                 return true
             }
-            val block = blockAt(x, y)
-            if (block != null) {
-                val accept = SpawnProofBlocks.id(block) !in accepted
+            val tile = tileAt(x, y)
+            if (tile != null) {
+                val accept = tile.id !in accepted
                 painting = accept
-                paint(block, accept)
+                paint(tile, accept)
                 return true
             }
         }
@@ -167,7 +172,7 @@ class SpawnProofBlocksScreen(private val parent: Screen?) : Screen(Component.lit
             return true
         }
         painting?.let { accept ->
-            blockAt(event.x(), event.y())?.let { paint(it, accept) }
+            tileAt(event.x(), event.y())?.let { paint(it, accept) }
             return true
         }
         return super.mouseDragged(event, dx, dy)
@@ -186,7 +191,7 @@ class SpawnProofBlocksScreen(private val parent: Screen?) : Screen(Component.lit
     }
 
     /** The block in the grid under x, y, or null. */
-    private fun blockAt(x: Double, y: Double): Block? {
+    private fun tileAt(x: Double, y: Double): Tile? {
         if (x < gridLeft || y < gridTop) return null
         val column = ((x - gridLeft) / TILE).toInt()
         val row = ((y - gridTop) / TILE).toInt()
@@ -194,9 +199,8 @@ class SpawnProofBlocksScreen(private val parent: Screen?) : Screen(Component.lit
         return shown.getOrNull((row + scroll) * columns + column)
     }
 
-    private fun paint(block: Block, accept: Boolean) {
-        val id = SpawnProofBlocks.id(block)
-        if (accept) accepted += id else accepted -= id
+    private fun paint(tile: Tile, accept: Boolean) {
+        if (accept) accepted += tile.id else accepted -= tile.id
     }
 
     private fun dragBarTo(mouseY: Double) {

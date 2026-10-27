@@ -386,14 +386,14 @@ object SpawnProofing {
      * of your inventory. Anything else in your hand (a tool, food) is left alone.
      */
     fun beforeUse(minecraft: Minecraft) {
+        // Counted down every tick, held or not: counted only while the key was held, a short
+        // click just after a swap found the cooldown still there and was ignored.
+        if (swapCooldown > 0) swapCooldown--
         if (guard.broken) return
         val state = shownState ?: return
         val spots = shownSpots ?: return
         if (!minecraft.options.keyUse.isDown || minecraft.gui.screen() != null) return
-        if (swapCooldown > 0) {
-            swapCooldown--
-            return
-        }
+        if (swapCooldown > 0) return
         val player = minecraft.player ?: return
         val held = player.mainHandItem
         val heldBlock = (held.item as? BlockItem)?.block

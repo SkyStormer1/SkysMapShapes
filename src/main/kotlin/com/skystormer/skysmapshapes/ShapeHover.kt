@@ -19,7 +19,6 @@ import xaero.map.gui.dropdown.rightclick.RightClickOption
 object ShapeHover {
 
     /** The shapes whose outline is under the mouse, closest first. Set every frame. */
-    @Volatile
     var hovered: List<MapShape> = emptyList()
         private set
 
