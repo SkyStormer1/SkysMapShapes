@@ -59,9 +59,10 @@ MiniHUD is optional. When it is installed, this mod and MiniHUD work as one:
 - **MiniHUD's shapes are drawn on your map** as outlines: a sphere is its widest circle, a prism or
   pyramid its base, a box its rectangle, a line its line. A shape lying sideways is the strip it
   covers.
-- **Kept in step.** Shapes in the dimension you are in are read from MiniHUD twice a second, so
-  adding, moving or deleting one in MiniHUD shows on the map straight away. Other dimensions come
-  from the files MiniHUD saves.
+- **Kept in step.** Shapes in the dimension you are in are read from MiniHUD whenever MiniHUD
+  changes them (and every ten seconds besides, for anything changed from a hotkey), so adding,
+  moving or deleting one in MiniHUD shows on the map straight away. Other dimensions come from the
+  files MiniHUD saves.
 - **Shown even when MiniHUD's own shape renderer is off**, so you can keep the world clear and
   still see everything on the map.
 - **Edit** on a MiniHUD shape opens MiniHUD's own Shape Editor on it.
@@ -96,7 +97,11 @@ MiniHUD is optional. When it is installed, this mod and MiniHUD work as one:
   **Blocks…** picks which blocks count as proofing (slabs by default; trapdoors, buttons, carpets,
   pressure plates and rails too), clicking or dragging across the grid; Easy Place uses the one in
   your hand if it is picked, or else the one you carry most. A distance slider keeps it close, and
-  MiniHUD's light level key switches it on and off. Placing anywhere else is left alone.
+  MiniHUD's light level key switches it on and off. Placing anywhere else is left alone. The spots
+  are drawn and placed whatever Litematica's render layers are set to. If something stops it working
+  (MiniHUD's rendering or light overlay off, a light range too small, Litematica's rendering or Easy
+  Place off, no blocks picked, no shape to proof), one chat line says what, with a **[Fix it]**
+  button, and the light levels screen lists every check with a **Fix** button each.
 - **Share MiniHUD shapes too.** The shared shape carries MiniHUD's own kind of shape, the height it
   sits at and its sizes (how tall, which way it stands, a box's top and bottom, a spawn sphere's
   margin): someone with MiniHUD gets exactly the same shape in their world, and someone without it
@@ -138,9 +143,9 @@ Beacons, under three headings:
   - **Blocked: through walls**: on to see the blocks in the way through everything, off to see them
     only where they're in sight.
 - **How far:**
-  - **Distance** (1 to 32 chunks): how far out beacons are looked for, as a circle around you, and
-    never past your render distance.
-  - **Up to** (50 to 1,000 beacons): how many get a beam, the nearest first.
+  - **Distance** (1 to 32 chunks, 12 to start with): how far out beacons are looked for, as a
+    circle around you, and never past your render distance.
+  - **Up to** (50 to 1,000 beacons, 200 to start with): how many get a beam, the nearest first.
 - **Heights drawn:** **From Y / To Y**: only the beams and blocks between these heights are drawn.
   Set From Y to 128 in the Nether to see only what's above the roof.
 

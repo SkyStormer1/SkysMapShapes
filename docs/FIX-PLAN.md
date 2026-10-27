@@ -82,7 +82,12 @@ Written from a full read of all 73 files on 2026-10-27. Nothing here has been bu
   - 5.7 B6 is not a bug: Fabric screen API 5.2.4's `ScreenMixin.beforeInit` makes new per-screen events
     on every `init` and `resize`, and every listener the map panels add is per-screen.
   - 5.8 (one `ShapeDraft` for both editors) not done: optional, and large enough for its own session.
-- [ ] Phase 6: defaults, version, notes
+- [x] Phase 6: defaults, version, notes
+  - 2026-10-27: build passes, 82 tests, 0 failures. Jar: `build/libs/skysmapshapes-1.7.1+26.3.jar`.
+  - Beacon defaults 200 and 12 in the settings table; a saved config keeps its own values.
+  - The repo had no changelog (releases are written on GitHub), so the notes are in `docs/RELEASE-1.7.1.md`,
+    ready to paste. README: beacon defaults, the setup help and layer bypass, and MiniHUD read on
+    change rather than twice a second.
 
 ---
 

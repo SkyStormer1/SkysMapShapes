@@ -167,10 +167,10 @@ object Config {
     var beaconOutlines by bool(false)
 
     /** How many beacons get a beam at most, the nearest first. */
-    var beaconLimit by int(MAX_BEACON_LIMIT, MIN_BEACON_LIMIT, MAX_BEACON_LIMIT)
+    var beaconLimit by int(200, MIN_BEACON_LIMIT, MAX_BEACON_LIMIT)
 
     /** How far out, in chunks, beacons are looked for; never past the chunks the game has loaded. */
-    var beaconDistance by int(MAX_BEACON_DISTANCE, MIN_BEACON_DISTANCE, MAX_BEACON_DISTANCE)
+    var beaconDistance by int(12, MIN_BEACON_DISTANCE, MAX_BEACON_DISTANCE)
 
     /** Experimental: the game's own beacon beams are not drawn, so only this mod's show. */
     var hideGameBeams by bool(false)
