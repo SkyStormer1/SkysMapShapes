@@ -38,7 +38,11 @@ Written from a full read of all 73 files on 2026-10-27. Nothing here has been bu
     since sharing already round-trips it (`aMiniHudShapeCarriesItsOwnSizes`).
   - Found while testing: three `UntrustedTest` lines were `Map shape: circle ...` with no name.
     They never parsed, so they passed without testing anything. They now have a name.
-- [ ] Phase 2: per-frame speed
+- [x] Phase 2: per-frame speed
+  - 2026-10-27: build passes, 71 tests, 0 failures (3 new in ShapeTest). Not checked in game yet.
+  - `ShapeStore.inDimension` no longer sorts, so `MapMenus` sorts its own click-time list by area.
+  - `Polygon.contains` now rejects points outside the bounding box first and measures edge distance only when the sides say outside.
+  - `MiniHudShapes.version` goes up on every read (twice a second), so the cached list is remade that often until phase 3.1 reads on triggers.
 - [ ] Phase 3: background work (MiniHUD triggers, beacons, Hide all)
 - [ ] Phase 4: spawn proofing setup help and the render layer bypass
 - [ ] Phase 5: duplicated and stale code

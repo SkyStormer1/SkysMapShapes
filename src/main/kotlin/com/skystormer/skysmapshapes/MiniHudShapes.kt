@@ -42,6 +42,11 @@ object MiniHudShapes {
     /** The shapes last read, every dimension. Replaced whole, as the render thread reads it. */
     @Volatile
     var all: List<MiniHudShape> = emptyList()
+        private set(value) { field = value; version++ }
+
+    /** Goes up whenever [all] is replaced, so lists made from it can be kept until it changes. */
+    @Volatile
+    var version = 0
         private set
 
     /** Ticks between reads of MiniHUD: twice a second. */
