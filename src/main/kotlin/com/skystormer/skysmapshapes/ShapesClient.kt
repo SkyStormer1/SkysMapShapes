@@ -60,7 +60,7 @@ object ShapesClient : ClientModInitializer {
         ClientPlayConnectionEvents.JOIN.register { _, _, client -> client.execute { ShapeStore.open(client) } }
         ClientPlayConnectionEvents.DISCONNECT.register { _, client ->
             client.execute {
-                ShapeStore.pruneHidden(MiniHudShapes.all.mapTo(HashSet()) { it.id })
+                ShapeStore.pruneHidden(MiniHudShapes.idsForPruning())
                 ShapeStore.close()
                 MiniHudShapes.clear()
                 ShapeShare.clear()
@@ -79,6 +79,13 @@ object ShapesClient : ClientModInitializer {
                 } catch (e: Throwable) {
                     Log.error("Could not add the Shapes panel to Xaero's world map", e)
                 }
+            }
+        }
+
+        // MiniHUD's shape screens closing; the next tick reads MiniHUD again.
+        ScreenEvents.AFTER_INIT.register { _, screen, _, _ ->
+            if (MiniHudShapes.installed && screen.javaClass.name.startsWith("fi.dy.masa.minihud.gui.GuiShape")) {
+                ScreenEvents.remove(screen).register { MiniHudShapes.markDirty() }
             }
         }
 

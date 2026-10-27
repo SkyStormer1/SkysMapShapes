@@ -1,6 +1,5 @@
 package com.skystormer.skysmapshapes
 
-import java.lang.reflect.Field
 import java.lang.reflect.Method
 import net.minecraft.core.BlockPos
 
@@ -44,8 +43,6 @@ object LightLevels {
 
     private var broken = false
     private var hookSeen = false
-    private var spotsField: Field? = null
-    private var posField: Field? = null
     private var needsUpdate: Pair<Any, Method>? = null
 
     /** What the shapes looked like at the last [tick], to notice a change that MiniHUD would not. */
@@ -64,12 +61,11 @@ object LightLevels {
             Log.info("Keeping MiniHUD's light levels to inside shapes")
         }
         return try {
-            val spots = spots(overlay)
+            val spots = MiniHudLight.spots(overlay)
             if (spots.isEmpty()) return true
-            val pos = posField ?: (spots.first() ?: return false).javaClass.getField(POS).also { posField = it }
             val (lit, dark) = volumes(Dimensions.ofPlayer() ?: return false)
             spots.removeIf { spot ->
-                val packed = pos.getLong(spot)
+                val packed = MiniHudLight.pos(spot ?: return@removeIf true)
                 val x = BlockPos.getX(packed)
                 val y = BlockPos.getY(packed)
                 val z = BlockPos.getZ(packed)
@@ -85,28 +81,18 @@ object LightLevels {
 
     /** Whether [overlay] still has spots to mark after [filter]. */
     @JvmStatic
-    fun anyLeft(overlay: Any): Boolean = spots(overlay).isNotEmpty()
-
-    @Suppress("UNCHECKED_CAST")
-    private fun spots(overlay: Any): MutableList<Any?> {
-        val field = spotsField ?: overlay.javaClass.getDeclaredField(SPOTS).also { it.isAccessible = true; spotsField = it }
-        return field.get(overlay) as MutableList<Any?>
-    }
+    fun anyLeft(overlay: Any): Boolean = MiniHudLight.spots(overlay).isNotEmpty()
 
     /** The volumes in [dimension] that light levels show in, and the ones they never show in. */
     private fun volumes(dimension: String): Pair<List<Volume>, List<Volume>> {
         val lit = ArrayList<Volume>()
         val dark = ArrayList<Volume>()
-        fun add(id: String, volume: Volume) {
+        for ((id, volume) in Volumes.inDimension(dimension)) {
             when (ShapeStore.lightRole(id)) {
                 Role.SHOW -> lit += volume
                 Role.NO_LIGHT -> dark += volume
                 Role.IGNORE -> {}
             }
-        }
-        for (shape in ShapeStore.inDimension(dimension)) if (shape.visible) add(shape.id, Volume.Column(shape.geometry))
-        for (shape in MiniHudShapes.inDimension(dimension)) {
-            if (shape.enabledInMiniHud) shape.volume?.let { add(shape.id, it) }
         }
         return lit to dark
     }
@@ -154,10 +140,6 @@ object LightLevels {
     }
 
     private const val OVERLAY = "fi.dy.masa.minihud.renderer.OverlayRendererLightLevel"
-
-    /** MiniHUD's list of spots to mark, and each spot's packed block position. */
-    private const val SPOTS = "lightInfos"
-    private const val POS = "pos"
 
     /** Ticks between looks at whether the shapes changed: twice a second, as MiniHUD's are read. */
     private const val CHECK_EVERY = 10

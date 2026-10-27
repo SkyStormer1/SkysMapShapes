@@ -43,7 +43,17 @@ Written from a full read of all 73 files on 2026-10-27. Nothing here has been bu
   - `ShapeStore.inDimension` no longer sorts, so `MapMenus` sorts its own click-time list by area.
   - `Polygon.contains` now rejects points outside the bounding box first and measures edge distance only when the sides say outside.
   - `MiniHudShapes.version` goes up on every read (twice a second), so the cached list is remade that often until phase 3.1 reads on triggers.
-- [ ] Phase 3: background work (MiniHUD triggers, beacons, Hide all)
+- [x] Phase 3: background work (MiniHUD triggers, beacons, Hide all)
+  - 2026-10-27: build passes, 72 tests, 0 failures (1 new in MiniHudTest). Not checked in game yet.
+  - 3.1: MiniHUD GUI class names in its jar are `GuiShapeEditor`, `GuiShapeManager`, `GuiShapesImport` and
+    `GuiShapesExport`; any screen whose class starts `fi.dy.masa.minihud.gui.GuiShape` marks a re-read on close.
+    The mixin (`ShapeManagerMixin`) is checked against MiniHUD 0.40.7's `addShape`/`removeShape` signatures.
+    Hide-all notes are pruned on disconnect from `MiniHudShapes.idsForPruning()`, which reads the other
+    dimensions' files then if they were not being read, so notes about their shapes are not lost.
+  - 3.3: after a shape is switched in MiniHUD inside a batch, `MiniHudShape.withEnabled` stands in for the re-read.
+  - 3.4: reach is `size / zoom + 16`, kept between 256 and 4096 blocks. Not checked that `size` is in pixels
+    and `zoom` pixels per block in Xaero's minimap: look at a shape at the minimap's edge in cave mode.
+  - Beacons: also a 30-second full re-scan as a safety net (chunks sent again would otherwise go unseen).
 - [ ] Phase 4: spawn proofing setup help and the render layer bypass
 - [ ] Phase 5: duplicated and stale code
 - [ ] Phase 6: defaults, version, notes
