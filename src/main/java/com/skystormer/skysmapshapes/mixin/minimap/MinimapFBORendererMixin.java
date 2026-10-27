@@ -42,6 +42,6 @@ public abstract class MinimapFBORendererMixin {
             boolean usingWorldMap, boolean rotate, int caveLayer, double playerX, double playerZ,
             boolean cave, XaeroBufferProvider buffers, CallbackInfo ci
     ) {
-        ShapeDrawing.drawMinimapAnyMode(matrixStack, renderPos, mapDimension, buffers);
+        ShapeDrawing.drawMinimapAnyMode(matrixStack, renderPos, mapDimension, buffers, size / zoom);
     }
 }

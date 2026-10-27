@@ -36,41 +36,178 @@ object BeaconBeams {
     private var ticks = 0
     private var broken = false
 
-    /** Every second, finds the beacons around you and what blocks each one. Main thread. */
+    /** The level everything below was read from; a different one (another dimension) starts it all again. */
+    private var scannedLevel: Level? = null
+
+    /** The beacons found in each chunk in range, by chunk key. A chunk with none is kept as an empty list, so it is not scanned again. */
+    private val chunkBeacons = HashMap<Long, List<BlockPos>>()
+
+    /** The beacons standing in each block column (x and z), so a changed block finds the beams it can affect. */
+    private val columns = HashMap<Long, ArrayList<BlockPos>>()
+
+    /** Each beacon's beam as last read, by packed position; one is dropped when a block in its column changes. */
+    private val made = HashMap<Long, Beam>()
+
+    /** Chunks to scan, nearest first: ones in range not yet scanned, and ones where a beacon was placed or broken. */
+    private val pending = ArrayDeque<Long>()
+    private val rescan = HashSet<Long>()
+
+    /** Whether [beams] must be worked out again from [chunkBeacons] and [made]. */
+    private var rebuild = true
+
+    /** The heights the beams in [made] were read between; moving either slider reads them again. */
+    private var seenLow = Int.MIN_VALUE
+    private var seenHigh = Int.MIN_VALUE
+
+    /** Finds the beacons around you and what blocks each one, a little each tick. Main thread. */
     fun tick() {
         if (broken) return
         val minecraft = Minecraft.getInstance()
         val level = minecraft.level
         val player = minecraft.player
         if (!Config.enabled || !(Config.beaconBeams || Config.beaconOutlines) || level == null || player == null) {
-            beams = emptyList()
+            if (scannedLevel != null || beams.isNotEmpty()) forgetAll()
             return
         }
-        if (ticks++ % REFRESH_TICKS != 0) return
         try {
-            val here = player.blockPosition()
-            val middleX = here.x shr 4
-            val middleZ = here.z shr 4
-            // The chunks within the distance chosen, as a circle round you, and never past what the
-            // game has loaded.
-            val chunks = minOf(Config.beaconDistance, minecraft.options.effectiveRenderDistance)
-            val found = ArrayList<BlockPos>()
-            for (x in middleX - chunks..middleX + chunks) {
-                for (z in middleZ - chunks..middleZ + chunks) {
-                    val dx = x - middleX
-                    val dz = z - middleZ
-                    if (dx * dx + dz * dz > chunks * chunks) continue
-                    val chunk = level.chunkSource.getChunk(x, z, false) ?: continue
-                    found.addAll(beaconsIn(chunk))
-                }
+            if (level !== scannedLevel) {
+                forgetAll()
+                scannedLevel = level
             }
-            // Nearest first, so a huge beacon wall still shows the ones around you; only those
-            // kept have their column read.
-            beams = found.sortedBy { it.distSqr(here) }.take(Config.beaconLimit).map { beamOf(level, it) }
+            // The beam is only read between the two heights, so moving either slider reads it again.
+            if (Config.beaconMinY != seenLow || Config.beaconMaxY != seenHigh) {
+                seenLow = Config.beaconMinY
+                seenHigh = Config.beaconMaxY
+                made.clear()
+                rebuild = true
+            }
+            val here = player.blockPosition()
+            if (ticks % REFRESH_TICKS == 0) {
+                plan(level, here, minOf(Config.beaconDistance, minecraft.options.effectiveRenderDistance))
+                rebuild = true
+            }
+            // Anything that changed without a block update being seen (a chunk sent again, say) is caught here.
+            if (ticks % SAFETY_NET_TICKS == SAFETY_NET_TICKS - 1) {
+                rescan.addAll(chunkBeacons.keys)
+                pending.addAll(chunkBeacons.keys)
+                made.clear()
+            }
+            ticks++
+            scanSome(level)
+            if (rebuild) rebuildBeams(level, here)
         } catch (e: Throwable) {
             broken = true
-            beams = emptyList()
+            forgetAll()
             Log.error("Could not find the beacons around you; beacon beams are off until the game restarts", e)
+        }
+    }
+
+    private fun forgetAll() {
+        scannedLevel = null
+        chunkBeacons.clear()
+        columns.clear()
+        made.clear()
+        pending.clear()
+        rescan.clear()
+        beams = emptyList()
+        rebuild = true
+        seenLow = Int.MIN_VALUE
+        seenHigh = Int.MIN_VALUE
+    }
+
+    private fun chunkKey(x: Int, z: Int): Long = (x.toLong() shl 32) or (z.toLong() and 0xFFFFFFFFL)
+
+    /**
+     * Works out which chunks are in range, as a circle round you: forgets the ones that fell out,
+     * and lines up the ones still to be scanned, nearest first.
+     */
+    private fun plan(level: Level, here: BlockPos, chunks: Int) {
+        val middleX = here.x shr 4
+        val middleZ = here.z shr 4
+        val wanted = HashMap<Long, Int>()
+        for (x in middleX - chunks..middleX + chunks) {
+            for (z in middleZ - chunks..middleZ + chunks) {
+                val dx = x - middleX
+                val dz = z - middleZ
+                val distance = dx * dx + dz * dz
+                if (distance <= chunks * chunks) wanted[chunkKey(x, z)] = distance
+            }
+        }
+        for (key in chunkBeacons.keys.filter { it !in wanted }) forgetChunk(key)
+        rescan.retainAll(wanted.keys)
+        pending.clear()
+        pending.addAll(wanted.keys.filter { it !in chunkBeacons || it in rescan }.sortedBy { wanted[it] })
+    }
+
+    /** At most [SCANS_PER_TICK] chunks off the line, so a big first scan is spread over a few ticks. */
+    private fun scanSome(level: Level) {
+        var scans = 0
+        while (scans < SCANS_PER_TICK) {
+            val key = pending.removeFirstOrNull() ?: return
+            if (key in chunkBeacons && key !in rescan) continue
+            // Not loaded yet: left alone, and tried again at the next plan.
+            val chunk = level.chunkSource.getChunk((key shr 32).toInt(), key.toInt(), false) ?: continue
+            scans++
+            forgetChunk(key)
+            val found = beaconsIn(chunk)
+            chunkBeacons[key] = found
+            for (beacon in found) columns.getOrPut(chunkKey(beacon.x, beacon.z)) { ArrayList() }.add(beacon)
+            rescan.remove(key)
+            rebuild = true
+        }
+    }
+
+    private fun forgetChunk(key: Long) {
+        val old = chunkBeacons.remove(key) ?: return
+        for (beacon in old) {
+            made.remove(beacon.asLong())
+            val column = chunkKey(beacon.x, beacon.z)
+            columns[column]?.let { it.remove(beacon); if (it.isEmpty()) columns.remove(column) }
+        }
+        rebuild = true
+    }
+
+    /**
+     * The nearest [Config.beaconLimit] beacons' beams. Only a beacon whose column has not been read
+     * is read now, [BEAMS_PER_TICK] at a time; the rest follow on the next ticks.
+     */
+    private fun rebuildBeams(level: Level, here: BlockPos) {
+        rebuild = false
+        val found = ArrayList<BlockPos>()
+        for (list in chunkBeacons.values) found.addAll(list)
+        // Nearest first, so a huge beacon wall still shows the ones around you.
+        val picked = found.sortedBy { it.distSqr(here) }.take(Config.beaconLimit)
+        var budget = BEAMS_PER_TICK
+        val out = ArrayList<Beam>(picked.size)
+        for (beacon in picked) {
+            val key = beacon.asLong()
+            var beam = made[key]
+            if (beam == null) {
+                if (budget == 0) { rebuild = true; continue }
+                budget--
+                beam = beamOf(level, beacon)
+                made[key] = beam
+            }
+            out.add(beam)
+        }
+        beams = out
+    }
+
+    /**
+     * Called as each block changes (from `ClientLevelMixin`). A beacon placed or broken has its chunk
+     * scanned again; a block in a beacon's column above it has that beam read again.
+     */
+    @JvmStatic
+    fun blockChanged(pos: BlockPos, old: BlockState, new: BlockState) {
+        if (scannedLevel == null) return
+        if (old.`is`(Blocks.BEACON) || new.`is`(Blocks.BEACON)) {
+            val key = chunkKey(pos.x shr 4, pos.z shr 4)
+            if (key in chunkBeacons && rescan.add(key)) pending.addFirst(key)
+        }
+        columns[chunkKey(pos.x, pos.z)]?.let { beacons ->
+            for (beacon in beacons) {
+                if (pos.y > beacon.y && made.remove(beacon.asLong()) != null) rebuild = true
+            }
         }
     }
 
@@ -95,13 +232,16 @@ object BeaconBeams {
         return found ?: emptyList()
     }
 
+    /** Only the part of the column the height sliders can show is read, from just above the beacon. */
     private fun beamOf(level: Level, beacon: BlockPos): Beam {
         val top = level.maxY
+        val first = maxOf(beacon.y + 1, Config.beaconMinY)
+        val last = minOf(top, Config.beaconMaxY)
         val runs = ArrayList<IntRange>()
         val cursor = BlockPos.MutableBlockPos()
         var start = Int.MIN_VALUE
-        for (y in beacon.y + 1..top + 1) {
-            val blocks = y <= top && blocksBeam(level.getBlockState(cursor.set(beacon.x, y, beacon.z)))
+        for (y in first..last + 1) {
+            val blocks = y <= last && blocksBeam(level.getBlockState(cursor.set(beacon.x, y, beacon.z)))
             if (blocks && start == Int.MIN_VALUE) start = y
             if (!blocks && start != Int.MIN_VALUE) {
                 runs.add(start until y)
@@ -171,7 +311,17 @@ object BeaconBeams {
         if (onTop) line.setAlwaysOnTop()
     }
 
+    /** Ticks between working out which chunks are in range and which beacons are the nearest: a second. */
     private const val REFRESH_TICKS = 20
+
+    /** Ticks between scanning every chunk in range again, in case a change was never seen. */
+    private const val SAFETY_NET_TICKS = 600
+
+    /** Chunks scanned for beacons in one tick, so a big first scan is spread over a few ticks. */
+    private const val SCANS_PER_TICK = 64
+
+    /** Beacon columns read in one tick. */
+    private const val BEAMS_PER_TICK = 32
 
     private const val BEAM_HALF = 0.2
     private const val GROW = 0.005

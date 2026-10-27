@@ -48,5 +48,8 @@ object MapShapes {
     }
 
     /** Every shape known for this server, hidden ones too. */
-    fun all(): List<MapShape> = ShapeStore.all + MiniHudShapes.all
+    fun all(): List<MapShape> {
+        MiniHudShapes.wantAllDimensions()
+        return ShapeStore.all + MiniHudShapes.all
+    }
 }

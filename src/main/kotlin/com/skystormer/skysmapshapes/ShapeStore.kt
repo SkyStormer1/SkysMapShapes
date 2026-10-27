@@ -213,14 +213,18 @@ object ShapeStore {
      * Hides every one of [shapes] that is showing, and remembers which, so [showAll] brings back
      * only those. With [inMiniHudToo], MiniHUD's shapes are switched off in MiniHUD as well.
      */
-    fun hideAll(shapes: List<MapShape>, inMiniHudToo: Boolean) {
+    fun hideAll(shapes: List<MapShape>, inMiniHudToo: Boolean) = batch {
         val remembered = hiddenByHideAll.toMutableMap()
         for (shape in shapes) {
             val did = HashSet<String>()
+            var switched: MapShape? = null
             if (shape is MiniHudShape && inMiniHudToo && shape.enabledInMiniHud && shape.changeable &&
-                setInMiniHud(shape, false)) did += IN_MINIHUD
-            // Read again: switching it off in MiniHUD gave it a new state.
-            val now = latest(shape)
+                setInMiniHud(shape, false)) {
+                did += IN_MINIHUD
+                switched = shape.withEnabled(false)
+            }
+            // Switching it off in MiniHUD gave it a new state; MiniHUD is not read again until the end.
+            val now = switched ?: latest(shape)
             if (now.visible) {
                 setVisible(now, false)
                 did += ON_MAP
@@ -236,25 +240,28 @@ object ShapeStore {
      * shows every one of them on the map instead (and in MiniHUD with [inMiniHudToo]).
      * Says how many it brought back.
      */
-    fun showAll(shapes: List<MapShape>, inMiniHudToo: Boolean): Int {
+    fun showAll(shapes: List<MapShape>, inMiniHudToo: Boolean): Int = batch {
         val remembered = shapes.filter { it.id in hiddenByHideAll }
         if (remembered.isEmpty()) {
             for (shape in shapes) {
-                if (shape is MiniHudShape && inMiniHudToo && !shape.enabledInMiniHud && shape.changeable) setInMiniHud(shape, true)
-                val now = latest(shape)
+                var switched: MapShape? = null
+                if (shape is MiniHudShape && inMiniHudToo && !shape.enabledInMiniHud && shape.changeable &&
+                    setInMiniHud(shape, true)) switched = shape.withEnabled(true)
+                val now = switched ?: latest(shape)
                 if (!now.visible) setVisible(now, true)
             }
-            return shapes.size
+            return@batch shapes.size
         }
         for (shape in remembered) {
             val did = hiddenByHideAll[shape.id].orEmpty()
-            if (shape is MiniHudShape && IN_MINIHUD in did) setInMiniHud(shape, true)
-            val now = latest(shape)
+            var switched: MapShape? = null
+            if (shape is MiniHudShape && IN_MINIHUD in did && setInMiniHud(shape, true)) switched = shape.withEnabled(true)
+            val now = switched ?: latest(shape)
             if (ON_MAP in did) setVisible(now, true)
         }
         hiddenByHideAll = hiddenByHideAll - remembered.map { it.id }.toSet()
         save()
-        return remembered.size
+        remembered.size
     }
 
     /** [shape] as last read: one of MiniHUD's gets a new state each time it is switched on or off there. */
@@ -367,7 +374,32 @@ object ShapeStore {
         }
     }
 
+    /** Above 0 while [batch] runs: saving waits until it ends. */
+    private var batching = 0
+    private var savePending = false
+
+    /**
+     * Runs [block], in which any number of shapes can be changed, saving the file once and
+     * reading MiniHUD once at the end rather than after every shape.
+     */
+    private fun <T> batch(block: () -> T): T {
+        batching++
+        try {
+            return MiniHudShapes.batch(block)
+        } finally {
+            batching--
+            if (batching == 0 && savePending) {
+                savePending = false
+                save()
+            }
+        }
+    }
+
     private fun save() {
+        if (batching > 0) {
+            savePending = true
+            return
+        }
         val path = file ?: return
         try {
             val array = JsonArray()

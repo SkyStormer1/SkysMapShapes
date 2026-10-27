@@ -1,6 +1,6 @@
 package com.skystormer.skysmapshapes
 
-import java.lang.reflect.Field
+import it.unimi.dsi.fastutil.longs.LongArrayList
 import java.lang.reflect.Method
 import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.client.Minecraft
@@ -88,9 +88,6 @@ object SpawnProofing {
     private var ticks = 0
     private var wasOn = false
 
-    private var spotsField: Field? = null
-    private var posField: Field? = null
-    private var blockField: Field? = null
     private var overlayOn: Pair<Any, Method>? = null
     private var mainOn: Pair<Any, Method>? = null
 
@@ -112,9 +109,7 @@ object SpawnProofing {
                 gatheredIn = dimension
                 return
             }
-            @Suppress("UNCHECKED_CAST")
-            val spots = (spotsField ?: overlay.javaClass.getDeclaredField(SPOTS).also { it.isAccessible = true; spotsField = it })
-                .get(overlay) as List<Any?>
+            val spots = MiniHudLight.spots(overlay)
             val limit = level.dimensionType().monsterSpawnBlockLightLimit()
             // At the slider's top it reaches as far as MiniHUD looks.
             val range = if (Config.spawnProofRange >= Config.MAX_SPAWN_PROOF_RANGE) Int.MAX_VALUE else Config.spawnProofRange
@@ -122,11 +117,11 @@ object SpawnProofing {
             val py = player.blockY
             val pz = player.blockZ
             val pos = BlockPos.MutableBlockPos()
-            val out = ArrayList<Long>()
+            val out = LongArrayList()
             for (spot in spots) {
                 spot ?: continue
-                val packed = (posField ?: spot.javaClass.getField(POS).also { posField = it }).getLong(spot)
-                val light = (blockField ?: spot.javaClass.getField(BLOCK_LIGHT).also { blockField = it }).getByte(spot).toInt()
+                val packed = MiniHudLight.pos(spot)
+                val light = MiniHudLight.blockLight(spot)
                 if (light > limit) continue
                 val x = BlockPos.getX(packed)
                 val y = BlockPos.getY(packed)
@@ -136,10 +131,9 @@ object SpawnProofing {
                 // Only where a block can go: not into water, not where something already stands.
                 val state = level.getBlockState(pos.set(x, y, z))
                 if (!state.canBeReplaced() || !state.fluidState.isEmpty) continue
-                out += packed
+                out.add(packed)
             }
-            out.sort()
-            gathered = out.toLongArray()
+            gathered = out.toLongArray().also { it.sort() }
             gatheredIn = dimension
             if (!seen) {
                 seen = true
@@ -153,14 +147,7 @@ object SpawnProofing {
 
     /** The shapes in [dimension] set to spawn-proof, as MiniHUD's light levels count them. */
     private fun volumes(dimension: String): List<Volume> {
-        val out = ArrayList<Volume>()
-        for (shape in ShapeStore.inDimension(dimension)) {
-            if (shape.visible && ShapeStore.spawnProof(shape.id)) out += Volume.Column(shape.geometry)
-        }
-        for (shape in MiniHudShapes.inDimension(dimension)) {
-            if (shape.enabledInMiniHud && ShapeStore.spawnProof(shape.id)) shape.volume?.let { out += it }
-        }
-        return out
+        return Volumes.inDimension(dimension) { ShapeStore.spawnProof(it) }.map { it.second }
     }
 
     /** Called every client tick: brings the placement up to date with the spots and the block. */
@@ -271,7 +258,9 @@ object SpawnProofing {
             return
         }
         val pos = BlockPos.MutableBlockPos()
-        val left = spots.filter { level.getBlockState(pos.set(it)).canBeReplaced() }.toLongArray()
+        val kept = LongArrayList(spots.size)
+        for (spot in spots) if (level.getBlockState(pos.set(spot)).canBeReplaced()) kept.add(spot)
+        val left = kept.toLongArray()
         val filled = left.isNotEmpty() && Config.spawnProofOpacity > 0f
         val edges = if (left.isNotEmpty() && (filled || Config.spawnProofRenderThrough)) SpawnOutlines.edges(left) else emptyList()
         outline = if (Config.spawnProofRenderThrough) edges else emptyList()
@@ -488,9 +477,6 @@ object SpawnProofing {
     private const val MAIN_TOGGLE = "MAIN_RENDERING_TOGGLE"
 
     /** MiniHUD's list of spots, and each spot's packed block position and block light. */
-    private const val SPOTS = "lightInfos"
-    private const val POS = "pos"
-    private const val BLOCK_LIGHT = "block"
 
     /** Ticks between updates: twice a second, as often as MiniHUD's own are read. */
     private const val CHECK_EVERY = 10
