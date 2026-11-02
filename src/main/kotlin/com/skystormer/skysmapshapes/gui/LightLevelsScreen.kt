@@ -145,7 +145,9 @@ class LightLevelsScreen(private val parent: Screen?) : FramedScreen(Component.li
                 null -> "\n\nCannot tell with this version of MiniHUD or Litematica."
             }
             val text = Component.literal("$mark ").withStyle { it.withColor(colour) }.append(Component.literal(SpawnProofSetup.line(check)))
-            addRenderableWidget(StringWidget(left, y + (ROW - font.lineHeight) / 2, text, font).also { it.setTooltip(Tooltip.create(Component.literal(tip))) })
+            // Leaves room for the Fix button; a line cut short is whole in its tooltip.
+            val textWidth = minOf(font.width(text), panelWidth - FIX_WIDTH - GAP)
+            addRenderableWidget(StringWidget(left, y + (ROW - font.lineHeight) / 2, textWidth, font.lineHeight, text, font).also { it.setTooltip(Tooltip.create(Component.literal(tip))) })
             if (passes == false && SpawnProofSetup.canFix(check)) {
                 addRenderableWidget(Button.builder(Component.literal("Fix")) {
                     SpawnProofSetup.fix(check)

@@ -95,8 +95,11 @@ public class SpawnProofOverlayGameTest implements FabricClientGameTest {
             context.takeScreenshot("settings-light-levels");
             String problem = context.computeOnClient(c -> {
                 var screen = c.gui.screen();
-                var widgets = screen.children().stream().filter(w -> w instanceof net.minecraft.client.gui.components.AbstractWidget)
+                var all = screen.children().stream().filter(w -> w instanceof net.minecraft.client.gui.components.AbstractWidget)
                         .map(w -> (net.minecraft.client.gui.components.AbstractWidget) w).toList();
+                // The footer's two buttons stay put; settings scrolled down under them are out of sight, not overlapping.
+                int footer = all.get(0).getY();
+                var widgets = all.stream().filter(w -> w == all.get(0) || w == all.get(1) || w.getBottom() <= footer).toList();
                 for (var w : widgets) {
                     if (w.getX() < 0 || w.getRight() > screen.width) return w.getMessage().getString() + " runs off the side";
                     for (var o : widgets) {
