@@ -90,11 +90,13 @@ object ShapeDrawing {
      * what it does underground in cave mode. Called where the two ways meet, so this draws only
      * when the world-map path has not already done it this frame.
      *
-     * Nothing here says how much of the world is on screen, so everything within [MINIMAP_REACH]
-     * of the middle is drawn and the minimap's own edges clip it.
+     * Xaero gives the minimap's size and zoom, so everything within that many blocks of the middle
+     * (a little more, and never less than [MINIMAP_MIN_REACH] or more than [MINIMAP_MAX_REACH]) is
+     * drawn and the minimap's own edges clip it. [reach] is the width in blocks the minimap shows,
+     * which also covers it turned to any angle.
      */
     @JvmStatic
-    fun drawMinimapAnyMode(pose: PoseStack, renderPos: Vec3, mapDimension: ResourceKey<Level>?, buffers: XaeroBufferProvider) {
+    fun drawMinimapAnyMode(pose: PoseStack, renderPos: Vec3, mapDimension: ResourceKey<Level>?, buffers: XaeroBufferProvider, reach: Double) {
         if (!caveHookRan) {
             caveHookRan = true
             Log.info("Minimap hook working (from the minimap's own data, as underground and in the Nether)")
@@ -108,10 +110,8 @@ object ShapeDrawing {
             val originX = Math.floor(renderPos.x).toInt()
             val originZ = Math.floor(renderPos.z).toInt()
             val matrix = pose.last().pose()
-            val view = Geometry.Bounds(
-                originX - MINIMAP_REACH, originZ - MINIMAP_REACH,
-                originX + MINIMAP_REACH, originZ + MINIMAP_REACH,
-            )
+            val range = (if (reach.isFinite()) reach + 16 else MINIMAP_MAX_REACH).coerceIn(MINIMAP_MIN_REACH, MINIMAP_MAX_REACH)
+            val view = Geometry.Bounds(originX - range, originZ - range, originX + range, originZ + range)
             val buffer = buffers.getBuffer(MinimapRenderTypes.MAP_CHUNK_OVERLAY)
             draw(buffer, matrix, shapes, originX, originZ, blocksPerUnit(matrix), view)
         } catch (e: Throwable) {
@@ -121,8 +121,9 @@ object ShapeDrawing {
 
     private var caveHookRan = false
 
-    /** How far from the middle of the minimap shapes are drawn, in blocks. */
-    private const val MINIMAP_REACH = 4096.0
+    /** The most and least far from the middle of the minimap shapes are drawn, in blocks. */
+    private const val MINIMAP_MAX_REACH = 4096.0
+    private const val MINIMAP_MIN_REACH = 256.0
 
     private fun shapesFor(mapProcessor: MapProcessor): List<MapShape>? {
         val dimension = mapProcessor.mapWorld?.currentDimension?.dimId?.identifier()?.toString() ?: return null

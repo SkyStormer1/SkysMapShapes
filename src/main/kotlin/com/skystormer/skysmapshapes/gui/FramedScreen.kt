@@ -1,5 +1,6 @@
 package com.skystormer.skysmapshapes.gui
 
+import com.mojang.blaze3d.platform.InputConstants
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.AbstractWidget
 import net.minecraft.client.gui.components.Button
@@ -36,6 +37,12 @@ abstract class FramedScreen(title: Component) : Screen(title) {
     private var resetButton: Button? = null
     private var fixed: List<AbstractWidget> = emptyList()
     private var scrolled: List<AbstractWidget> = emptyList()
+
+    /**
+     * How wide the column of settings is: [ConfigScreen.WIDTH], or narrower when the screen is,
+     * at a big GUI scale or in a small window, so nothing runs off its sides.
+     */
+    protected val panelWidth: Int get() = minOf(ConfigScreen.WIDTH, width - (BAR + 6) * 2)
 
     private fun top(): Int = HEADER
     private fun bottom(): Int = height - FOOTER
@@ -111,10 +118,9 @@ abstract class FramedScreen(title: Component) : Screen(title) {
 
     private fun trackHeight(): Int = bottom() - top() - 2
 
-    private fun thumbHeight(): Int =
-        (trackHeight() * trackHeight() / maxOf(1, contentHeight + PAD * 2)).coerceIn(minOf(16, trackHeight()), trackHeight())
+    private fun thumbHeight(): Int = ScrollBar.thumbHeight(trackHeight(), trackHeight(), contentHeight + PAD * 2)
 
-    private fun thumbTop(): Int = top() + 1 + (trackHeight() - thumbHeight()) * scroll / maxOf(1, maxScroll())
+    private fun thumbTop(): Int = ScrollBar.thumbTop(top() + 1, trackHeight(), thumbHeight(), scroll, maxScroll())
 
     /** Moves the scrolled widgets rather than rebuilding them, so a half-typed box keeps its text and focus. */
     private fun scrollTo(wanted: Int) {
@@ -134,7 +140,7 @@ abstract class FramedScreen(title: Component) : Screen(title) {
     }
 
     override fun mouseClicked(event: MouseButtonEvent, doubleClick: Boolean): Boolean {
-        if (maxScroll() > 0 && event.button() == 0 && event.x() >= barLeft() && event.x() < barLeft() + BAR &&
+        if (maxScroll() > 0 && event.button() == InputConstants.MOUSE_BUTTON_LEFT && event.x() >= barLeft() && event.x() < barLeft() + BAR &&
             event.y() >= top() && event.y() < bottom()
         ) {
             draggingBar = true
@@ -171,8 +177,7 @@ abstract class FramedScreen(title: Component) : Screen(title) {
 
     /** Puts the middle of the bar's thumb under the mouse. */
     private fun dragBarTo(mouseY: Double) {
-        val room = maxOf(1, trackHeight() - thumbHeight())
-        scrollTo(((mouseY - top() - 1 - thumbHeight() / 2.0) / room * maxScroll()).roundToInt())
+        scrollTo(ScrollBar.scrollFor(mouseY, top() + 1, trackHeight(), thumbHeight(), thumbHeight() / 2.0, maxScroll()))
     }
 
     companion object {

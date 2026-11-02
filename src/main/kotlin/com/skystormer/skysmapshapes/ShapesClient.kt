@@ -12,10 +12,12 @@ import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelExtractionEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.SharedConstants
 import net.minecraft.client.KeyMapping
+import net.minecraft.client.gui.screens.Screen
 import net.minecraft.resources.Identifier
 
 object ShapesClient : ClientModInitializer {
@@ -42,34 +44,48 @@ object ShapesClient : ClientModInitializer {
 
         // A shape shared in chat becomes a message with an add button; everything else is untouched.
         ClientReceiveMessageEvents.ALLOW_CHAT.register { message, _, _, _, _ -> ShapeShare.onChat(message.string) }
-        ClientReceiveMessageEvents.ALLOW_GAME.register { message, _ -> ShapeShare.onChat(message.string) }
+        // Action-bar text comes through here too ([overlay]); a shape there is not turned into a chat line.
+        ClientReceiveMessageEvents.ALLOW_GAME.register { message, overlay -> overlay || ShapeShare.onChat(message.string) }
 
+        // `fix <check>` is spawn proofing's [Fix it]; any other word is a shared shape's code. Brigadier
+        // tries a matching literal before the argument, and no code is ever the word "fix".
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             dispatcher.register(
-                ClientCommands.literal(ShapeShare.COMMAND).then(
-                    ClientCommands.argument("code", StringArgumentType.word()).executes { context ->
-                        ShapeShare.accept(StringArgumentType.getString(context, "code"))
-                        1
-                    }
-                )
+                ClientCommands.literal(ShapeShare.COMMAND)
+                    .then(
+                        ClientCommands.literal(SpawnProofSetup.FIX).then(
+                            ClientCommands.argument("check", StringArgumentType.word()).executes { context ->
+                                SpawnProofSetup.fixFromCommand(StringArgumentType.getString(context, "check"))
+                                1
+                            }
+                        )
+                    )
+                    .then(
+                        ClientCommands.argument("code", StringArgumentType.word()).executes { context ->
+                            ShapeShare.accept(StringArgumentType.getString(context, "code"))
+                            1
+                        }
+                    )
             )
         }
 
         ClientPlayConnectionEvents.JOIN.register { _, _, client -> client.execute { ShapeStore.open(client) } }
         ClientPlayConnectionEvents.DISCONNECT.register { _, client ->
             client.execute {
-                ShapeStore.pruneHidden(MiniHudShapes.all.mapTo(HashSet()) { it.id })
+                ShapeStore.pruneHidden(MiniHudShapes.idsForPruning())
                 ShapeStore.close()
                 MiniHudShapes.clear()
                 ShapeShare.clear()
                 ShapeHover.clear()
+                SpawnProofing.reset()
+                SpawnProofSetup.reset()
             }
         }
 
         // The Shapes panel on Xaero's world map, which docks with Sky's Map Exposer's bar and Sky's
         // Structure Map's legend.
         ScreenEvents.AFTER_INIT.register { _, screen, _, _ ->
-            if (Config.enabled && screen.javaClass.name == "xaero.map.gui.GuiMap") {
+            if (Config.enabled && isWorldMap(screen)) {
                 try {
                     ShapesPanel.addTo(screen)
                     AddShapeWindow.install(screen)
@@ -79,11 +95,27 @@ object ShapesClient : ClientModInitializer {
             }
         }
 
+        // MiniHUD's shape screens closing; the next tick reads MiniHUD again.
+        ScreenEvents.AFTER_INIT.register { _, screen, _, _ ->
+            if (MiniHudShapes.installed && screen.javaClass.name.startsWith("fi.dy.masa.minihud.gui.GuiShape")) {
+                ScreenEvents.remove(screen).register { MiniHudShapes.markDirty() }
+            }
+        }
+
+        // Spawn proofing's through-blocks outlines, added as each frame is gathered.
+        LevelExtractionEvents.END_EXTRACTION.register {
+            SpawnProofing.drawOutlines()
+            BeaconBeams.draw()
+        }
+
+        // Before the game handles the use key, so Easy Place gets the swapped-in block.
+        ClientTickEvents.START_CLIENT_TICK.register { client -> SpawnProofing.beforeUse(client) }
+
         ClientTickEvents.END_CLIENT_TICK.register { client ->
             if (!hookChecked) {
                 hookChecked = true
                 reportMinimapHooks()
-                if (hasHook("xaero.map.gui.GuiMap", "drawShapes")) Log.info("Xaero hooks installed") else Log.warn("This version of Xaero's World Map is not supported; shapes will not be drawn on it")
+                if (hasHook(WORLD_MAP, "drawShapes")) Log.info("Xaero hooks installed") else Log.warn("This version of Xaero's World Map is not supported; shapes will not be drawn on it")
             }
             if (!labelsAdded) {
                 labelsAdded = try {
@@ -95,14 +127,22 @@ object ShapesClient : ClientModInitializer {
             }
             MiniHudShapes.tick(client)
             LightLevels.tick()
+            SpawnProofing.tick()
+            SpawnProofSetup.tick()
+            BeaconBeams.tick()
             ShapeShare.tick()
             // Hover only means anything while the world map is open.
-            if (client.gui.screen()?.javaClass?.name != "xaero.map.gui.GuiMap") ShapeHover.clear()
+            if (!isWorldMap(client.gui.screen())) ShapeHover.clear()
             while (listKey.consumeClick()) {
                 if (client.gui.screen() == null) client.gui.setScreen(ShapeListScreen(null))
             }
         }
     }
+
+    /** Whether [screen] is Xaero's world map. Told by class name, so nothing of Xaero's is loaded to ask. */
+    fun isWorldMap(screen: Screen?): Boolean = screen?.javaClass?.name == WORLD_MAP
+
+    private const val WORLD_MAP = "xaero.map.gui.GuiMap"
 
     /**
      * Which of the two minimap hooks made it in: the one for terrain drawn from the world map, and
@@ -110,7 +150,8 @@ object ShapesClient : ClientModInitializer {
      * this is how a missing one gets noticed rather than shapes quietly not appearing.
      */
     private fun reportMinimapHooks() {
-        if (!FabricLoader.getInstance().isModLoaded("xaerominimap")) return
+        // The same ids as the minimap hooks' MinimapMixinPlugin: the minimap, or its Fair-Play build.
+        if (listOf("xaerominimap", "xaerominimapfair").none(FabricLoader.getInstance()::isModLoaded)) return
         val fromWorldMap = hasHook("xaero.common.mods.SupportXaeroWorldmap", "drawShapes")
         val ownData = hasHook("xaero.common.minimap.render.MinimapFBORenderer", "drawShapes")
         // Applying the class is not the same as finding the spot inside it; the drawing itself

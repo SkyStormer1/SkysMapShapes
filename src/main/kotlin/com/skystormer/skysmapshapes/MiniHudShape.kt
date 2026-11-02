@@ -23,6 +23,11 @@ class MiniHudShape(
     /** MiniHUD's own sizes for it ([MiniHudGeometry.sizes]), shared with it so the other end makes the same shape. */
     val sizes: com.google.gson.JsonObject? = null,
 ) : MapShape {
+    /** The same shape as it is once switched [on] or off in MiniHUD, for use before MiniHUD has been read again. */
+    fun withEnabled(on: Boolean) = MiniHudShape(
+        id, label, dimension, colour, geometry, typeId, on, centreY, handle, file, volume, sizes,
+    )
+
     /** Whether MiniHUD's editor can be opened on it from here: only in the dimension you are in. */
     val editable: Boolean get() = handle != null
 

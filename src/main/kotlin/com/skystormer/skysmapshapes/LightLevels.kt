@@ -1,6 +1,5 @@
 package com.skystormer.skysmapshapes
 
-import java.lang.reflect.Field
 import java.lang.reflect.Method
 import net.minecraft.core.BlockPos
 
@@ -42,15 +41,13 @@ object LightLevels {
     val active: Boolean
         get() = Config.enabled && Config.lightInsideShapes && Config.showMiniHud && MiniHudShapes.installed
 
-    private var broken = false
+    private val guard = Guard("light levels show as MiniHUD has them")
     private var hookSeen = false
-    private var spotsField: Field? = null
-    private var posField: Field? = null
     private var needsUpdate: Pair<Any, Method>? = null
 
     /** What the shapes looked like at the last [tick], to notice a change that MiniHUD would not. */
     private var lastState = 0
-    private var ticks = 0
+    private val check = Every(CHECK_EVERY)
 
     /**
      * Takes the spots outside the shapes out of [overlay]'s list, when [active]. Says whether it
@@ -58,55 +55,40 @@ object LightLevels {
      */
     @JvmStatic
     fun filter(overlay: Any): Boolean {
-        if (broken || !active) return false
+        if (guard.broken || !active) return false
         if (!hookSeen) {
             hookSeen = true
             Log.info("Keeping MiniHUD's light levels to inside shapes")
         }
-        return try {
-            val spots = spots(overlay)
+        return guard.run("keep MiniHUD's light levels to inside shapes", false) {
+            val spots = MiniHudLight.spots(overlay)
             if (spots.isEmpty()) return true
-            val pos = posField ?: (spots.first() ?: return false).javaClass.getField(POS).also { posField = it }
             val (lit, dark) = volumes(Dimensions.ofPlayer() ?: return false)
             spots.removeIf { spot ->
-                val packed = pos.getLong(spot)
+                val packed = MiniHudLight.pos(spot ?: return@removeIf true)
                 val x = BlockPos.getX(packed)
                 val y = BlockPos.getY(packed)
                 val z = BlockPos.getZ(packed)
                 dark.any { it.contains(x, y, z) } || lit.none { it.contains(x, y, z) }
             }
             true
-        } catch (e: Throwable) {
-            broken = true
-            Log.error("Could not keep MiniHUD's light levels to inside shapes; they show as MiniHUD has them until the game restarts", e)
-            false
         }
     }
 
     /** Whether [overlay] still has spots to mark after [filter]. */
     @JvmStatic
-    fun anyLeft(overlay: Any): Boolean = spots(overlay).isNotEmpty()
-
-    @Suppress("UNCHECKED_CAST")
-    private fun spots(overlay: Any): MutableList<Any?> {
-        val field = spotsField ?: overlay.javaClass.getDeclaredField(SPOTS).also { it.isAccessible = true; spotsField = it }
-        return field.get(overlay) as MutableList<Any?>
-    }
+    fun anyLeft(overlay: Any): Boolean = MiniHudLight.spots(overlay).isNotEmpty()
 
     /** The volumes in [dimension] that light levels show in, and the ones they never show in. */
     private fun volumes(dimension: String): Pair<List<Volume>, List<Volume>> {
         val lit = ArrayList<Volume>()
         val dark = ArrayList<Volume>()
-        fun add(id: String, volume: Volume) {
+        for ((id, volume) in Volumes.inDimension(dimension)) {
             when (ShapeStore.lightRole(id)) {
                 Role.SHOW -> lit += volume
                 Role.NO_LIGHT -> dark += volume
                 Role.IGNORE -> {}
             }
-        }
-        for (shape in ShapeStore.inDimension(dimension)) if (shape.visible) add(shape.id, Volume.Column(shape.geometry))
-        for (shape in MiniHudShapes.inDimension(dimension)) {
-            if (shape.enabledInMiniHud) shape.volume?.let { add(shape.id, it) }
         }
         return lit to dark
     }
@@ -116,9 +98,8 @@ object LightLevels {
      * added, changed, shown or hidden, or the setting switched, would otherwise not show until then.
      */
     fun tick() {
-        if (broken || !MiniHudShapes.installed) return
-        ticks = (ticks + 1) % CHECK_EVERY
-        if (ticks != 0) return
+        if (guard.broken || !MiniHudShapes.installed) return
+        if (!check.due()) return
         val state = state()
         if (state != lastState) {
             lastState = state
@@ -140,24 +121,17 @@ object LightLevels {
 
     /** Asks MiniHUD to gather its light level spots again, so a change shows straight away. */
     fun refresh() {
-        if (broken || !MiniHudShapes.installed) return
-        try {
+        if (!MiniHudShapes.installed) return
+        guard.run("ask MiniHUD to redraw its light levels", Unit) {
             val (overlay, method) = needsUpdate ?: run {
                 val overlayClass = Class.forName(OVERLAY)
                 (overlayClass.getField("INSTANCE").get(null) to overlayClass.getMethod("setNeedsUpdate")).also { needsUpdate = it }
             }
             method.invoke(overlay)
-        } catch (e: Throwable) {
-            broken = true
-            Log.error("Could not ask MiniHUD to redraw its light levels", e)
         }
     }
 
     private const val OVERLAY = "fi.dy.masa.minihud.renderer.OverlayRendererLightLevel"
-
-    /** MiniHUD's list of spots to mark, and each spot's packed block position. */
-    private const val SPOTS = "lightInfos"
-    private const val POS = "pos"
 
     /** Ticks between looks at whether the shapes changed: twice a second, as MiniHUD's are read. */
     private const val CHECK_EVERY = 10

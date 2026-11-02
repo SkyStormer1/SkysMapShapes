@@ -42,13 +42,51 @@ object MiniHudShapes {
     /** The shapes last read, every dimension. Replaced whole, as the render thread reads it. */
     @Volatile
     var all: List<MiniHudShape> = emptyList()
+        private set(value) { field = value; version++ }
+
+    /** Goes up whenever [all] is replaced, so lists made from it can be kept until it changes. */
+    @Volatile
+    var version = 0
         private set
 
-    /** Ticks between reads of MiniHUD: twice a second. */
-    private const val READ_EVERY = 10
+    /**
+     * Ticks between reads that nothing asked for: a safety net for what the triggers miss, such as
+     * MiniHUD changing a shape from a hotkey. Ten seconds.
+     */
+    private const val SAFETY_NET_EVERY = 200
 
-    private var ticks = 0
-    private var broken = false
+    /** How many ticks the other dimensions stay read after the shapes list last asked for them. */
+    private const val ASKED_FOR_TICKS = 40
+
+    private val safetyNet = Every(SAFETY_NET_EVERY)
+    private val guard = Guard("MiniHUD's shapes are not shown")
+
+    /** Set by [markDirty]: the next tick reads MiniHUD. Volatile, as MiniHUD may call it from another thread. */
+    @Volatile
+    private var dirty = true
+
+    /** The dimension the player was in at the last tick, to notice a change. */
+    private var lastDimension: String? = null
+
+    /** The dimension the world map was showing at the last tick, while other dimensions were wanted. */
+    private var lastMapDimension: String? = null
+
+    /** Whether [all] holds the other dimensions' shapes from MiniHUD's files as well as the live ones. */
+    private var othersLoaded = false
+
+    /** Ticks left that the shapes list's request for every dimension still counts. */
+    private var askedFor = 0
+
+    /** Above 0 while [batch] runs: file edits and the read after a change wait until it ends. */
+    private var batching = 0
+
+    /** MiniHUD's files changed inside a [batch], by file, written once when it ends. */
+    private val pendingFiles = LinkedHashMap<Path, JsonObject>()
+
+    private var readAfterBatch = false
+
+    /** Shapes that failed to read, said once each. */
+    private val reportedBad = HashSet<String>()
     private val fileCache = HashMap<Path, Pair<Long, List<MiniHudShape>>>()
 
     private class Api(
@@ -81,26 +119,120 @@ object MiniHudShapes {
         }
     }
 
-    /** Called every client tick; reads MiniHUD twice a second. */
+    /**
+     * Says MiniHUD's shapes may have changed, so the next tick reads them. Called when a shape is
+     * added or removed (see `ShapeManagerMixin`), when one of MiniHUD's shape screens closes, and
+     * whenever this mod changes a shape there.
+     */
+    @JvmStatic
+    fun markDirty() {
+        dirty = true
+    }
+
+    /**
+     * Runs [block], in which any number of shapes can be switched on or off, with each of
+     * MiniHUD's files written once and MiniHUD read once at the end rather than after every shape.
+     */
+    fun <T> batch(block: () -> T): T {
+        batching++
+        try {
+            return block()
+        } finally {
+            batching--
+            if (batching == 0) finishBatch()
+        }
+    }
+
+    private fun finishBatch() {
+        for ((file, root) in pendingFiles) {
+            try {
+                SafeFiles.writeString(file, GSON.toJson(root))
+            } catch (e: Exception) {
+                Log.error("Could not change MiniHUD's file $file", e)
+            }
+            fileCache.remove(file)
+        }
+        pendingFiles.clear()
+        if (readAfterBatch) {
+            readAfterBatch = false
+            tick(Minecraft.getInstance(), force = true)
+        }
+    }
+
+    /** Reads MiniHUD now, or once the running [batch] ends. */
+    private fun readSoon() {
+        if (batching > 0) readAfterBatch = true else tick(Minecraft.getInstance(), force = true)
+    }
+
+    /**
+     * Asked by anything that needs shapes from every dimension, such as the shapes list. Those
+     * come from MiniHUD's files, which are only read while something wants them.
+     */
+    fun wantAllDimensions() {
+        if (askedFor == 0 && !othersLoaded) dirty = true
+        askedFor = ASKED_FOR_TICKS
+    }
+
+    /**
+     * Called every client tick. The dimension you are in is read from MiniHUD's live list when
+     * something says it changed ([markDirty]), when you change dimension, and every ten seconds as
+     * a safety net. The other dimensions' files are read only while the world map shows another
+     * dimension or the shapes list asks for them.
+     */
     fun tick(minecraft: Minecraft, force: Boolean = false) {
-        if (!installed || broken || !Config.enabled || !Config.showMiniHud) {
+        if (!installed || guard.broken || !Config.enabled || !Config.showMiniHud) {
             if (all.isNotEmpty()) all = emptyList()
             return
         }
-        ticks = (ticks + 1) % READ_EVERY
-        if (ticks != 0 && !force) return
-        val level = minecraft.level ?: run { all = emptyList(); return }
-        val api = api ?: run { broken = true; return }
-        try {
-            val here = level.dimension().identifier().toString()
-            val live = (api.getAllShapes.invoke(api.manager) as List<*>).mapNotNull { shape ->
-                (api.export.invoke(api.manager, shape) as? JsonElement)?.takeIf { it.isJsonObject }?.let { parse(it.asJsonObject, here, shape) }
+        val level = minecraft.level ?: run { if (all.isNotEmpty()) all = emptyList(); return }
+        val here = level.dimension().identifier().toString()
+        if (here != lastDimension) {
+            lastDimension = here
+            dirty = true
+        }
+        val mapDimension = Dimensions.ofMap()
+        if (askedFor > 0) askedFor--
+        val wantOthers = askedFor > 0 || (mapDimension != null && mapDimension != here)
+        // The world map being switched to another dimension needs that dimension's file read.
+        val mapMoved = wantOthers && mapDimension != lastMapDimension
+        lastMapDimension = if (wantOthers) mapDimension else null
+        if (wantOthers != othersLoaded || mapMoved) dirty = true
+        if (safetyNet.due()) dirty = true
+        if (!dirty && !force) return
+        dirty = false
+        val api = api ?: run { guard.stop(); return }
+        guard.run("read MiniHUD's shapes", Unit) {
+            val live = ArrayList<MiniHudShape>()
+            for (shape in api.getAllShapes.invoke(api.manager) as List<*>) {
+                // One odd shape is skipped and said once; it does not stop the rest being read.
+                try {
+                    (api.export.invoke(api.manager, shape) as? JsonElement)?.takeIf { it.isJsonObject }
+                        ?.let { parse(it.asJsonObject, here, shape) }?.let { live += it }
+                } catch (e: Throwable) {
+                    val why = (e.cause ?: e).toString()
+                    if (reportedBad.add(why)) Log.error("Could not read one of MiniHUD's shapes; it is left out ($why)", e)
+                }
             }
-            all = live + otherDimensions(api, here)
+            othersLoaded = wantOthers
+            all = if (wantOthers) live + otherDimensions(api, here) else live
+        }
+        if (guard.broken) all = emptyList()
+    }
+
+    /**
+     * The ids of every shape MiniHUD has for this world, other dimensions' files included whether
+     * or not they were being read, for dropping notes about shapes that are gone. Empty when that
+     * cannot be told.
+     */
+    fun idsForPruning(): Set<String> {
+        val api = api ?: return emptySet()
+        val here = lastDimension ?: return emptySet()
+        if (all.isEmpty()) return emptySet()
+        return try {
+            val others = if (othersLoaded) all.filter { it.file != null } else otherDimensions(api, here)
+            (all.filter { it.file == null } + others).mapTo(HashSet()) { it.id }
         } catch (e: Throwable) {
-            broken = true
-            all = emptyList()
-            Log.error("Could not read MiniHUD's shapes; they will not be shown until the game restarts", e)
+            emptySet()
         }
     }
 
@@ -113,7 +245,12 @@ object MiniHudShapes {
     fun clear() {
         all = emptyList()
         fileCache.clear()
-        ticks = 0
+        safetyNet.restart()
+        dirty = true
+        lastDimension = null
+        lastMapDimension = null
+        othersLoaded = false
+        askedFor = 0
         reportedPrefix = null
     }
 
@@ -238,6 +375,9 @@ object MiniHudShapes {
         return try {
             // A shared MiniHUD shape is made again as the kind it was, at the sizes it had.
             val json = MiniHudGeometry.forMiniHud(shape, y, typeId, form, sizes) ?: return "MiniHUD has no shape like that."
+            // Checked again as it will really be made: shared sizes can make it far bigger than its
+            // outline, and MiniHUD crashes the game on a shape too big rather than refusing it.
+            MiniHudGeometry.whyTooBig(json)?.let { return it }
             val kind = json.get("type").asString
             val typeClass = Class.forName("fi.dy.masa.minihud.renderer.shapes.ShapeType")
             val type = typeClass.getMethod("fromString", String::class.java).invoke(null, kind)
@@ -256,13 +396,45 @@ object MiniHudShapes {
                 if (!editFile(file) { shapes -> shapes.add(took); true }) return "MiniHUD's file could not be written; the log says why."
                 Log.info("Added {} to MiniHUD's file for the {}", shape.name, Dimensions.name(shape.dimension))
             }
-            tick(Minecraft.getInstance(), force = true)
+            readSoon()
             null
         } catch (e: Throwable) {
             Log.error("Could not make ${shape.name} in MiniHUD", e)
             "MiniHUD would not take that shape; the log says why."
         }
     }
+
+    /** What came of [tryCreate]. */
+    sealed interface CreateResult {
+        /** It is in MiniHUD now. */
+        object Made : CreateResult
+
+        /** It was not made, and [why] says so in a line for the screen. */
+        class Refused(val why: String) : CreateResult
+
+        /** Big enough to slow the game: say [warning], and make it only when asked again. */
+        class WarnFirst(val warning: String) : CreateResult
+    }
+
+    /**
+     * The add window's and the full edit screen's "make it in MiniHUD": checked as typed and as
+     * MiniHUD will really make it (shared [sizes] can make it far bigger than its outline), then a
+     * shape big enough to slow the game is only warned about unless [warned] says that was already
+     * done, then [create]. The screens keep their own "press again" state.
+     */
+    internal fun tryCreate(shape: Shape, y: Int, form: MiniHudGeometry.Form?, typeId: String?, sizes: JsonObject?, warned: Boolean): CreateResult {
+        val asForm = typeId?.let { MiniHudGeometry.formOfType(it) } ?: form
+        MiniHudGeometry.whyTooBig(shape, asForm)?.let { return CreateResult.Refused(shortened(it)) }
+        val json = MiniHudGeometry.forMiniHud(shape, y, typeId, form, sizes)
+        json?.let(MiniHudGeometry::whyTooBig)?.let { return CreateResult.Refused(shortened(it)) }
+        val warning = json?.let(MiniHudGeometry::lagWarning) ?: MiniHudGeometry.lagWarning(shape, form)
+        if (warning != null && !warned) return CreateResult.WarnFirst(warning)
+        create(shape, y, typeId, form, sizes)?.let { return CreateResult.Refused(shortened(it)) }
+        return CreateResult.Made
+    }
+
+    /** A refusal without its "it stays on this mod's map" ending, which does not hold in a screen still open. */
+    private fun shortened(why: String): String = why.substringBefore(" It stays").substringBefore(", so it stays")
 
     /** Whether shapes can be made in MiniHUD for [dimension]: live where you are, else through its file. */
     fun canReach(dimension: String): Boolean =
@@ -287,12 +459,18 @@ object MiniHudShapes {
      * file written, through [SafeFiles] so a failure never leaves half a file.
      */
     private fun editFile(file: Path, change: (JsonArray) -> Boolean): Boolean = try {
-        val root = if (Files.exists(file)) Files.newBufferedReader(file).use { JsonParser.parseReader(it) }.asJsonObject else JsonObject()
+        // Inside a batch the file is read once and changed in memory, then written when it ends.
+        val root = pendingFiles[file]
+            ?: if (Files.exists(file)) Files.newBufferedReader(file).use { JsonParser.parseReader(it) }.asJsonObject else JsonObject()
         val holder = root.getAsJsonObject("shapes") ?: JsonObject().also { root.add("shapes", it) }
         val shapes = holder.getAsJsonArray("shapes") ?: JsonArray().also { holder.add("shapes", it) }
         if (change(shapes)) {
-            SafeFiles.writeString(file, GSON.toJson(root))
-            fileCache.remove(file)
+            if (batching > 0) {
+                pendingFiles[file] = root
+            } else {
+                SafeFiles.writeString(file, GSON.toJson(root))
+                fileCache.remove(file)
+            }
         }
         true
     } catch (e: Exception) {
@@ -328,7 +506,7 @@ object MiniHudShapes {
                 }
                 else -> return false
             }
-            tick(Minecraft.getInstance(), force = true)
+            readSoon()
             true
         } catch (e: Throwable) {
             Log.error("Could not delete ${shape.name} from MiniHUD", e)
@@ -364,7 +542,7 @@ object MiniHudShapes {
                 }
                 else -> return false
             }
-            tick(Minecraft.getInstance(), force = true)
+            readSoon()
             true
         } catch (e: Throwable) {
             Log.error("Could not switch a shape ${if (enabled) "on" else "off"} in MiniHUD", e)

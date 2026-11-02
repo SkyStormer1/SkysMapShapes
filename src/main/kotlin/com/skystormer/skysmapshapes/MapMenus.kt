@@ -32,7 +32,7 @@ object MapMenus {
             if (!ShapeStore.isOpen) return@guard Log.warn("Map right-click: no shapes file open (not in a world?)")
             options.add(option("Add shape here", options.size, target) { parent -> add(parent, dim, x, z, "") })
             // Every shape under the click can be edited from here, even one whose label is off screen.
-            val under = ShapeStore.inDimension(dim).filter { it.visible && it.contains(x, z) }
+            val under = ShapeStore.inDimension(dim).filter { it.visible && it.contains(x, z) }.sortedByDescending { it.area }
             for (shape in under.take(MAX_UNDER_CLICK)) {
                 options.add(option("Edit shape: ${shape.name}", options.size, target) { parent -> edit(parent, shape) })
             }
@@ -80,28 +80,19 @@ object MapMenus {
                 if (!shape.enabledInMiniHud) {
                     options.add(option("Show in both", options.size, target,
                         tip = cannot ?: "On the map, and switched on in MiniHUD so it is in the world too.") { _ ->
-                        if (ShapeStore.setInMiniHud(shape, true)) {
-                            ShapeStore.setVisible(shape, true)
-                            say("Showing ${shape.name} on the map and in MiniHUD.")
-                        } else {
-                            say("MiniHUD would not switch ${shape.name} on; the log says why.")
-                        }
+                        switchInMiniHud(shape, true, "Showing ${shape.name} on the map and in MiniHUD.") { ShapeStore.setVisible(shape, true) }
                     }.setActive(shape.changeable))
                 }
                 options.add(option(if (shape.enabledInMiniHud) "Switch off in MiniHUD" else "Switch on in MiniHUD", options.size, target,
                     tip = cannot ?: "Leaves it off the map.") { _ ->
                     val on = !shape.enabledInMiniHud
-                    if (ShapeStore.setInMiniHud(shape, on)) say("Switched ${shape.name} ${if (on) "on" else "off"} in MiniHUD.")
-                    else say("MiniHUD would not switch ${shape.name} ${if (on) "on" else "off"}; the log says why.")
+                    switchInMiniHud(shape, on, "Switched ${shape.name} ${if (on) "on" else "off"} in MiniHUD.")
                 }.setActive(shape.changeable))
             } else if (shape.enabledInMiniHud) {
                 options.add(option("Hide in both", options.size, target,
                     tip = cannot ?: "Off the map, and switched off in MiniHUD so it goes from the world too.") { _ ->
-                    if (ShapeStore.setInMiniHud(shape, false)) {
+                    switchInMiniHud(shape, false, "Hid ${shape.name} on the map and in MiniHUD. Show it again from the Shapes list.") {
                         ShapeStore.setVisible(shape, false)
-                        say("Hid ${shape.name} on the map and in MiniHUD. Show it again from the Shapes list.")
-                    } else {
-                        say("MiniHUD would not switch ${shape.name} off; the log says why.")
                     }
                 }.setActive(shape.changeable))
                 options.add(option("Hide on the map only", options.size, target,
@@ -111,8 +102,7 @@ object MapMenus {
                 })
                 options.add(option("Hide in MiniHUD only", options.size, target,
                     tip = cannot ?: "Switched off in MiniHUD, so it goes from the world. It stays on the map.") { _ ->
-                    if (ShapeStore.setInMiniHud(shape, false)) say("Switched ${shape.name} off in MiniHUD. It is still on the map.")
-                    else say("MiniHUD would not switch ${shape.name} off; the log says why.")
+                    switchInMiniHud(shape, false, "Switched ${shape.name} off in MiniHUD. It is still on the map.")
                 }.setActive(shape.changeable))
             } else {
                 options.add(option("Hide on the map", options.size, target, tip = "It is already off in MiniHUD.") { _ ->
@@ -121,11 +111,11 @@ object MapMenus {
                 })
                 options.add(option("Switch on in MiniHUD", options.size, target,
                     tip = cannot ?: "Switched back on in MiniHUD, so it is in the world again.") { _ ->
-                    if (ShapeStore.setInMiniHud(shape, true)) say("Switched ${shape.name} on in MiniHUD.")
-                    else say("MiniHUD would not switch ${shape.name} on; the log says why.")
+                    switchInMiniHud(shape, true, "Switched ${shape.name} on in MiniHUD.")
                 }.setActive(shape.changeable))
             }
             if (shape.volume != null) addLightOption(options, target, shape, "It only counts while it is on in MiniHUD.")
+            if (shape.volume != null) addSpawnProofOption(options, target, shape, "It only counts while it is on in MiniHUD.")
             if (ShapeShare.asShape(shape) != null) {
                 options.add(option("Share in chat…", options.size, target) { parent -> confirmShare(parent, shape) })
             }
@@ -148,6 +138,7 @@ object MapMenus {
             })
         }
         addLightOption(options, target, shape, "It counts at every height inside its outline, while it is shown on the map.")
+        addSpawnProofOption(options, target, shape, "It counts at every height inside its outline, while it is shown on the map.")
         options.add(option("Share in chat…", options.size, target) { parent -> confirmShare(parent, shape) })
         if (MiniHudShapes.installed && Config.showMiniHud) {
             // Greyed out when MiniHUD cannot take it, and the line itself says why on hover.
@@ -176,22 +167,48 @@ object MapMenus {
     }
 
     /**
+     * Switches [shape] [on] or off in MiniHUD; when that worked, does [also] and says [done], else
+     * says MiniHUD would not.
+     */
+    private fun switchInMiniHud(shape: MiniHudShape, on: Boolean, done: String, also: () -> Unit = {}) {
+        if (ShapeStore.setInMiniHud(shape, on)) {
+            also()
+            say(done)
+        } else {
+            say("MiniHUD would not switch ${shape.name} ${if (on) "on" else "off"}; the log says why.")
+        }
+    }
+
+    /**
+     * Whether [shape]'s spawnable floors get Litematica blocks to Easy Place (see [SpawnProofing]).
+     * [counts] says when it counts.
+     */
+    private fun addSpawnProofOption(options: ArrayList<RightClickOption>, target: IRightClickableElement, shape: MapShape, counts: String) {
+        if (!SpawnProofing.active || Config.spawnProofEverywhere) return
+        val on = ShapeStore.spawnProof(shape.id)
+        options.add(option("Spawn proofing: ${if (on) "on" else "off"}", options.size, target,
+            tip = "On: every floor MiniHUD's light level overlay marks inside it, where mobs could spawn, gets a block for Litematica's Easy Place. $counts") { _ ->
+            ShapeStore.setSpawnProof(shape.id, !on)
+            say(if (on) "Spawn proofing off in ${shape.name}." else "Spawn proofing ${shape.name}: switch on MiniHUD's light levels and use Easy Place.")
+        })
+    }
+
+    /**
      * A new shape at block ([x], [z]), at height [y] when it is known (a waypoint's): on the world map, in the window beside the Shapes panel with
      * the shape drawn live; anywhere else, on the full add screen.
      */
     fun add(parent: Screen?, dimension: String, x: Int, z: Int, label: String, y: Int? = null) {
-        if (parent != null && isWorldMap(parent)) AddShapeWindow.openNew(parent, dimension, x, z, label, y)
+        if (parent != null && ShapesClient.isWorldMap(parent)) AddShapeWindow.openNew(parent, dimension, x, z, label, y)
         else open(ShapeEditScreen.forNew(parent, dimension, x, z, label, y))
     }
 
     /** Editing one of this mod's shapes, the same way round as [add]. */
     fun edit(parent: Screen?, shape: Shape) {
         val current = ShapeStore.byId(shape.id) ?: return
-        if (parent != null && isWorldMap(parent) && Dimensions.ofMap() == current.dimension) AddShapeWindow.openExisting(parent, current)
+        if (parent != null && ShapesClient.isWorldMap(parent) && Dimensions.ofMap() == current.dimension) AddShapeWindow.openExisting(parent, current)
         else open(ShapeEditScreen.forExisting(parent, current))
     }
 
-    private fun isWorldMap(screen: Screen) = screen.javaClass.name == "xaero.map.gui.GuiMap"
 
     /** Asks who to share with first: everyone, or one player privately. */
     fun confirmShare(parent: Screen?, shape: MapShape) {

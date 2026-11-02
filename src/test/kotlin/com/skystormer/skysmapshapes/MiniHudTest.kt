@@ -199,4 +199,15 @@ class MiniHudTest {
         val json = """{"type":"despawn_sphere","enabled":true,"display_name":"A","center":[1.5,2,3.5],"radius":128.0}"""
         assertEquals(parse(json)!!.id, parse(json.replace("\"A\"", "\"Renamed\""))!!.id)
     }
+
+    @Test
+    fun aShapeSwitchedOffKeepsEverythingElse() {
+        val on = parse("""{"type":"despawn_sphere","enabled":true,"display_name":"Farm sphere","center":[120.25,38.5,-64.75],"radius":128.0,"margin":3.0,"color":1613803696}""")!!
+        val off = on.withEnabled(false)
+        assertFalse(off.enabledInMiniHud)
+        assertEquals(on.id, off.id)
+        assertEquals(on.name, off.name)
+        assertEquals(on.centreY, off.centreY)
+        assertTrue(on.withEnabled(true).enabledInMiniHud)
+    }
 }

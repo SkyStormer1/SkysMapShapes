@@ -3,6 +3,8 @@
   "package": "com.skystormer.skysmapshapes.mixin",
   "compatibilityLevel": "JAVA_${java_version}",
   "client": [
+    "BeaconRendererMixin",
+    "ClientLevelMixin",
     "GuiMapMixin",
     "WaypointReaderMixin"
   ],

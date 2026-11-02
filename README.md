@@ -59,9 +59,10 @@ MiniHUD is optional. When it is installed, this mod and MiniHUD work as one:
 - **MiniHUD's shapes are drawn on your map** as outlines: a sphere is its widest circle, a prism or
   pyramid its base, a box its rectangle, a line its line. A shape lying sideways is the strip it
   covers.
-- **Kept in step.** Shapes in the dimension you are in are read from MiniHUD twice a second, so
-  adding, moving or deleting one in MiniHUD shows on the map straight away. Other dimensions come
-  from the files MiniHUD saves.
+- **Kept in step.** Shapes in the dimension you are in are read from MiniHUD whenever MiniHUD
+  changes them (and every ten seconds besides, for anything changed from a hotkey), so adding,
+  moving or deleting one in MiniHUD shows on the map straight away. Other dimensions come from the
+  files MiniHUD saves.
 - **Shown even when MiniHUD's own shape renderer is off**, so you can keep the world clear and
   still see everything on the map.
 - **Edit** on a MiniHUD shape opens MiniHUD's own Shape Editor on it.
@@ -90,6 +91,17 @@ MiniHUD is optional. When it is installed, this mod and MiniHUD work as one:
   mobs spawn (nether wastes, crimson forest, soul sand valley, basalt deltas), and red nether wart
   blocks do not count in a crimson forest, where nothing spawns on them. The colours still follow
   light, as only wither skeletons, skeletons and endermen need the dark.
+- **Spawn proofing with Easy Place** (needs Litematica too). Every dark spot MiniHUD's light level
+  overlay marks, inside shapes set to spawn-proof (right-click a shape) or everywhere if you choose,
+  becomes a spot Litematica's Easy Place fills, with its own overlay colour, opacity and height.
+  **Blocks…** picks which blocks count as proofing (slabs by default; trapdoors, buttons, carpets,
+  pressure plates and rails too), clicking or dragging across the grid; Easy Place uses the one in
+  your hand if it is picked, or else the one you carry most. A distance slider keeps it close, and
+  MiniHUD's light level key switches it on and off. Placing anywhere else is left alone. The spots
+  are drawn and placed whatever Litematica's render layers are set to. If something stops it working
+  (MiniHUD's rendering or light overlay off, a light range too small, Litematica's rendering or Easy
+  Place off, no blocks picked, no shape to proof), one chat line says what, with a **[Fix it]**
+  button, and the light levels screen lists every check with a **Fix** button each.
 - **Share MiniHUD shapes too.** The shared shape carries MiniHUD's own kind of shape, the height it
   sits at and its sizes (how tall, which way it stands, a box's top and bottom, a spawn sphere's
   margin): someone with MiniHUD gets exactly the same shape in their world, and someone without it
@@ -112,6 +124,30 @@ centred on it; cones and pyramids rise from it, as tall as they are wide from th
 can be changed afterwards in MiniHUD's editor. MiniHUD's ellipsoids are at most 2048 blocks north to
 south, so a longer ellipse stays on this mod's map, and you are warned before moving a shape so big
 that MiniHUD drawing it may slow the game.
+
+## Experimental
+
+Settings still being tried out, on the settings screen's **Experimental** tab. All are off until you
+turn them on.
+
+Beacons, under three headings:
+
+- **What is drawn:**
+  - **Beams** and **Blocked**, each switched on its own: a beam straight up from every beacon near
+    you, lit or not, and a red outline around every block in its way, so you know what to break to
+    light it. Blocks count as in the way just as the game decides: only full solid blocks that let
+    no light through, except bedrock. Glass, leaves, slabs, stairs, fences, anvils, chains, honey,
+    slime and ice let the beam through; tinted glass does not. Each unbroken run of blocks in a
+    beam's way is outlined as one box, so even a big beacon wall stays quick to draw.
+  - **Game beams**: off hides the game's own beacon beams.
+  - **Blocked: through walls**: on to see the blocks in the way through everything, off to see them
+    only where they're in sight.
+- **How far:**
+  - **Distance** (1 to 32 chunks, 12 to start with): how far out beacons are looked for, as a
+    circle around you, and never past your render distance.
+  - **Up to** (50 to 1,000 beacons, 200 to start with): how many get a beam, the nearest first.
+- **Heights drawn:** **From Y / To Y**: only the beams and blocks between these heights are drawn.
+  Set From Y to 128 in the Nether to see only what's above the roof.
 
 ## Installing
 
